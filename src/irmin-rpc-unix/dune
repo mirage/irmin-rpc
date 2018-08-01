@@ -1,0 +1,4 @@
+(library
+  (name irmin_rpc_unix)
+  (public_name irmin-rpc-unix)
+  (libraries irmin-rpc capnp-rpc-unix irmin-unix))

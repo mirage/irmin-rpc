@@ -1,0 +1,10 @@
+(executables
+    (libraries irmin-rpc)
+    (names test)
+    (modules test))
+
+(alias
+    (name runtest)
+    (package irmin-rpc)
+    (deps test.exe)
+    (action (run %{dep:test.exe})))
