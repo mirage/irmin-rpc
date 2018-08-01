@@ -1,4 +1,5 @@
 module Make(Store: Irmin.KV): sig
+  module Rpc: Irmin_rpc.S with module Store = Store
   module Server: sig
     val start:
       ?backlog: int ->

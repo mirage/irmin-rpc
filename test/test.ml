@@ -7,13 +7,19 @@
 open Lwt.Infix
 
 module Store = Irmin_unix.Git.FS.KV(Irmin.Contents.String)
-module Rpc = Irmin_rpc.Make(Store)
+module Rpc = Irmin_rpc_unix.Make(Store)
 
-let _ =
+let addr = `TCP ("127.0.0.1", 7000)
+let secret_key = `Ephemeral
+
+let main =
   let cfg = Irmin_git.config "./tmp" in
   Store.Repo.v cfg >>= fun repo ->
-    let t = Rpc.local repo in
-    Capnp_rpc_lwt.Networking.
+  Rpc.Server.start ~secret_key addr repo >>= fun uri ->
+  Fmt.pr "Running at: %a@." Uri.pp_hum uri;
+  fst @@ Lwt.wait ()
+
+let _ = Lwt_main.run main
 
 
 (*---------------------------------------------------------------------------
