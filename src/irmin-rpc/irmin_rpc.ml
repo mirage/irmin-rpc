@@ -67,12 +67,20 @@ end) = struct
           Results.result_set results x;
           Lwt.return_ok resp)
 
-      method remove_impl =
-        failwith "not implelemted"
+      method remove_impl req release_params =
+        let open Ir.Remove in
+        let branch = Params.branch_get req in
+        let branch = Api.Reader.Irmin.Branch.name_get branch in
+        let key = Params.key_get_list req in
+        release_params ();
+        Service.return_lwt (fun () ->
+          let resp, _results = Service.Response.create Results.init_pointer in
+          Store.of_branch ctx branch >>= fun t ->
+          Store.remove t key ~info:(Info.info "set") >>= fun () ->
+          Lwt.return_ok resp)
 
       method master_impl =
         failwith "not implelemted"
-
 
       method get_branch_impl =
         failwith "not implelemted"

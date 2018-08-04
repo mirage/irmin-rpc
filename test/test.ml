@@ -15,8 +15,8 @@ let secret_key = `Ephemeral
 let main =
   let cfg = Irmin_git.config "./tmp" in
   Store.Repo.v cfg >>= fun repo ->
-  Rpc.Server.start ~secret_key addr repo >>= fun uri ->
-  Fmt.pr "Running at: %a@." Uri.pp_hum uri;
+  Rpc.Server.create ~secret_key addr repo >>= fun uri ->
+  Fmt.pr "Running at: %a@." Uri.pp_hum (Rpc.Server.uri uri);
   fst @@ Lwt.wait ()
 
 let _ = Lwt_main.run main
