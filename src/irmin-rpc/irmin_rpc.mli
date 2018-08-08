@@ -8,6 +8,7 @@ module type S = sig
   module Client: sig
     val get: t -> Store.key -> (Store.contents, [`Msg of string]) result Lwt.t
     val set: t -> Store.key -> Store.contents -> bool Lwt.t
+    val remove: t -> Store.key -> unit Lwt.t
   end
 end
 

@@ -15,7 +15,7 @@ interface Irmin {
   struct Info {
       author @0 :Text;
       message @1 :Text;
-      date @2 :UInt64;
+      date @2 :Int64;
   }
 
   enum Kind {

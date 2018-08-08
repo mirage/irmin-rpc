@@ -12,6 +12,7 @@ module type S = sig
   module Client: sig
     val get: t -> Store.key -> (Store.contents, [`Msg of string]) result Lwt.t
     val set: t -> Store.key -> Store.contents -> bool Lwt.t
+    val remove: t -> Store.key -> unit Lwt.t
   end
 end
 
@@ -79,11 +80,52 @@ end) = struct
           Store.remove t key ~info:(Info.info "set") >>= fun () ->
           Lwt.return_ok resp)
 
-      method master_impl =
-        failwith "not implelemted"
+      method master_impl _req release_params =
+        let open Ir.Master in
+        let module Branch = Api.Builder.Irmin.Branch in
+        let module Commit = Api.Builder.Irmin.Commit in
+        let module Info = Api.Builder.Irmin.Info in
+        release_params ();
+        Service.return_lwt (fun () ->
+          let resp, results = Service.Response.create Results.init_pointer in
+          let br = Results.result_init results in
+          let commit = Branch.head_init br in
+          let info = Commit.info_init commit in
+          Store.master ctx >>= fun t ->
+          Store.Head.find t >>= function
+          | Some head ->
+            Branch.name_set br "master";
+            Commit.hash_set commit (Fmt.to_to_string Store.Commit.Hash.pp (Store.Commit.hash head));
+            let i = Store.Commit.info head in
+            Info.author_set info (Irmin.Info.author i);
+            Info.message_set info (Irmin.Info.message i);
+            Info.date_set info (Irmin.Info.date i);
+            Lwt.return_ok resp
+          | None -> Lwt.return_ok resp)
 
-      method get_branch_impl =
-        failwith "not implelemted"
+      method get_branch_impl req release_params =
+        let open Ir.GetBranch in
+        let module Branch = Api.Builder.Irmin.Branch in
+        let module Commit = Api.Builder.Irmin.Commit in
+        let module Info = Api.Builder.Irmin.Info in
+        let name = Params.name_get req in
+        release_params ();
+        Service.return_lwt (fun () ->
+          let resp, results = Service.Response.create Results.init_pointer in
+          let br = Results.result_init results in
+          let commit = Branch.head_init br in
+          let info = Commit.info_init commit in
+          Store.of_branch ctx name >>= fun t ->
+          Store.Head.find t >>= function
+          | Some head ->
+            Branch.name_set br name;
+            Commit.hash_set commit (Fmt.to_to_string Store.Commit.Hash.pp (Store.Commit.hash head));
+            let i = Store.Commit.info head in
+            Info.author_set info (Irmin.Info.author i);
+            Info.message_set info (Irmin.Info.message i);
+            Info.date_set info (Irmin.Info.date i);
+            Lwt.return_ok resp
+          | None -> Lwt.return_ok resp)
 
 
       method get_tree_impl =
@@ -107,6 +149,12 @@ end) = struct
         Params.key_set_list p key |> ignore;
         Params.value_set p (Fmt.to_to_string Store.Contents.pp value);
         Capability.call_for_value_exn t method_id req >|= Results.result_get
+
+      let remove t key: unit Lwt.t =
+        let open Ir.Remove in
+        let req, p = Capability.Request.create Params.init_pointer in
+        Params.key_set_list p key |> ignore;
+        Capability.call_for_value_exn t method_id req >>= fun _ -> Lwt.return_unit
     end
 end
 
