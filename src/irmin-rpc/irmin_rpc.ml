@@ -24,6 +24,28 @@ end) = struct
   let local ctx =
     let module Ir = Api.Service.Irmin in
 
+    (* Get branch by name and convert it to a capnproto branch object *)
+    let to_branch ?branch br =
+        let module Branch = Api.Builder.Irmin.Branch in
+        let module Commit = Api.Builder.Irmin.Commit in
+        let module Info = Api.Builder.Irmin.Info in
+        let commit = Branch.head_init br in
+        let info = Commit.info_init commit in
+        let get_branch () = match branch with None -> Store.master ctx | Some name -> Store.of_branch ctx name in
+        get_branch ()>>= fun t ->
+        Store.Head.find t >>= function
+        | Some head ->
+          Branch.name_set br "master";
+          Commit.hash_set commit (Fmt.to_to_string Store.Commit.Hash.pp (Store.Commit.hash head));
+          let i = Store.Commit.info head in
+          Info.author_set info (Irmin.Info.author i);
+          Info.message_set info (Irmin.Info.message i);
+          Info.date_set info (Irmin.Info.date i);
+          Lwt.return_some br
+        | None -> Lwt.return_none
+
+    in
+
     Ir.local @@ object
       inherit Ir.service
 
@@ -89,19 +111,7 @@ end) = struct
         Service.return_lwt (fun () ->
           let resp, results = Service.Response.create Results.init_pointer in
           let br = Results.result_init results in
-          let commit = Branch.head_init br in
-          let info = Commit.info_init commit in
-          Store.master ctx >>= fun t ->
-          Store.Head.find t >>= function
-          | Some head ->
-            Branch.name_set br "master";
-            Commit.hash_set commit (Fmt.to_to_string Store.Commit.Hash.pp (Store.Commit.hash head));
-            let i = Store.Commit.info head in
-            Info.author_set info (Irmin.Info.author i);
-            Info.message_set info (Irmin.Info.message i);
-            Info.date_set info (Irmin.Info.date i);
-            Lwt.return_ok resp
-          | None -> Lwt.return_ok resp)
+          to_branch br >>= fun _ -> Lwt.return_ok resp)
 
       method get_branch_impl req release_params =
         let open Ir.GetBranch in
@@ -113,24 +123,10 @@ end) = struct
         Service.return_lwt (fun () ->
           let resp, results = Service.Response.create Results.init_pointer in
           let br = Results.result_init results in
-          let commit = Branch.head_init br in
-          let info = Commit.info_init commit in
-          Store.of_branch ctx name >>= fun t ->
-          Store.Head.find t >>= function
-          | Some head ->
-            Branch.name_set br name;
-            Commit.hash_set commit (Fmt.to_to_string Store.Commit.Hash.pp (Store.Commit.hash head));
-            let i = Store.Commit.info head in
-            Info.author_set info (Irmin.Info.author i);
-            Info.message_set info (Irmin.Info.message i);
-            Info.date_set info (Irmin.Info.date i);
-            Lwt.return_ok resp
-          | None -> Lwt.return_ok resp)
-
+          to_branch ~branch:name br >>= fun _ -> Lwt.return_ok resp)
 
       method get_tree_impl =
         failwith "not implelemted"
-
     end
 
     module Client = struct
