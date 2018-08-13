@@ -43,7 +43,26 @@ end) = struct
           Info.date_set info (Irmin.Info.date i);
           Lwt.return_some br
         | None -> Lwt.return_none
+    in
 
+    (* TODO: add Metadata to capnp file *)
+    let rec to_tree tr key (tree: Store.tree): unit Lwt.t =
+      let module Tree = Api.Builder.Irmin.Tree in
+      let module Node = Api.Builder.Irmin.Node in
+      ignore @@ Tree.key_set_list tr key;
+      Store.Tree.to_concrete tree >>= function
+      | `Contents (contents, _) ->
+          let _ = Tree.contents_set tr (Fmt.to_to_string Store.Contents.pp contents) in
+          Lwt.return_unit
+      | `Tree l ->
+          Lwt_list.map_p (fun (step, tree) ->
+            let node = Node.init_root () in
+            Node.step_set node step;
+            let tt = Node.tree_init node in
+            to_tree tt (Store.Key.rcons key step) (Store.Tree.of_concrete tree) >|= fun () -> node
+          ) l
+          >>= fun l ->
+            let _ = Tree.node_set_list tr l in Lwt.return_unit
     in
 
     Ir.local @@ object
@@ -125,8 +144,21 @@ end) = struct
           let br = Results.result_init results in
           to_branch ~branch:name br >>= fun _ -> Lwt.return_ok resp)
 
-      method get_tree_impl =
-        failwith "not implelemted"
+      method get_tree_impl req release_params =
+        let open Ir.GetTree in
+        let module Tree = Api.Builder.Irmin.Tree in
+        let module Node = Api.Builder.Irmin.Node in
+        let branch = Params.branch_get req in
+        let branch = Api.Reader.Irmin.Branch.name_get branch in
+        let key = Params.key_get_list req in
+        release_params ();
+        Service.return_lwt (fun () ->
+          let resp, results = Service.Response.create Results.init_pointer in
+          Store.of_branch ctx branch >>= fun t ->
+          Store.get_tree t key >>= fun tree ->
+          let tr = Results.result_init results in
+          to_tree tr key tree >>= fun () ->
+          Lwt.return_ok resp)
     end
 
     module Client = struct
