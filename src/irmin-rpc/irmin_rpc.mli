@@ -6,9 +6,9 @@ module type S = sig
   val local: Store.repo -> t
 
   module Client: sig
-    val get: t -> Store.key -> (Store.contents, [`Msg of string]) result Lwt.t
-    val set: t -> Store.key -> Store.contents -> bool Lwt.t
-    val remove: t -> Store.key -> unit Lwt.t
+    val get: t -> ?branch:string -> Store.key -> (Store.contents, [`Msg of string]) result Lwt.t
+    val set: t -> ?branch:string-> Store.key -> Store.contents -> bool Lwt.t
+    val remove: t -> ?branch:string -> Store.key -> unit Lwt.t
   end
 end
 

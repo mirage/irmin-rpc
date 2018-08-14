@@ -16,8 +16,11 @@ module Make(Store: Irmin.KV): sig
   end
 
   module Client: sig
-    (*type 'a t = 'a Capnp_rpc_lwt.Capability.t
+    type t = Irmin_rpc.t
 
-    val connect: Uri.t -> 'a t Lwt.t*)
+    val connect: Uri.t -> t Lwt.t
+    val get: t -> ?branch:string -> Store.key -> (Store.contents, [`Msg of string]) result Lwt.t
+    val set: t -> ?branch:string -> Store.key -> Store.contents -> bool Lwt.t
+    val remove: t -> ?branch:string -> Store.key -> unit Lwt.t
   end
 end

@@ -10,9 +10,9 @@ module type S = sig
   val local: Store.repo -> t
 
   module Client: sig
-    val get: t -> Store.key -> (Store.contents, [`Msg of string]) result Lwt.t
-    val set: t -> Store.key -> Store.contents -> bool Lwt.t
-    val remove: t -> Store.key -> unit Lwt.t
+    val get: t -> ?branch:string -> Store.key -> (Store.contents, [`Msg of string]) result Lwt.t
+    val set: t -> ?branch:string -> Store.key -> Store.contents -> bool Lwt.t
+    val remove: t -> ?branch:string -> Store.key -> unit Lwt.t
   end
 end
 
@@ -71,7 +71,6 @@ end) = struct
       method get_impl req release_params =
         let open Ir.Get in
         let branch = Params.branch_get req in
-        let branch = Api.Reader.Irmin.Branch.name_get branch in
         let branch = Store.Branch.of_string branch in
         let key = Params.key_get_list req |> Store.Key.v in
         release_params ();
@@ -90,10 +89,10 @@ end) = struct
           | Error _ -> Lwt.return_unit) >>= fun () ->
           Lwt.return_ok resp)
 
+      (* TODO: add commit parameter *)
       method set_impl req release_params =
         let open Ir.Set in
         let branch = Params.branch_get req in
-        let branch = Api.Reader.Irmin.Branch.name_get branch in
         let key = Params.key_get_list req in
         let value = Params.value_get req in
         release_params ();
@@ -109,10 +108,10 @@ end) = struct
           Results.result_set results x;
           Lwt.return_ok resp)
 
+      (* TODO: add commit parameter *)
       method remove_impl req release_params =
         let open Ir.Remove in
         let branch = Params.branch_get req in
-        let branch = Api.Reader.Irmin.Branch.name_get branch in
         let key = Params.key_get_list req in
         release_params ();
         Service.return_lwt (fun () ->
@@ -149,7 +148,6 @@ end) = struct
         let module Tree = Api.Builder.Irmin.Tree in
         let module Node = Api.Builder.Irmin.Node in
         let branch = Params.branch_get req in
-        let branch = Api.Reader.Irmin.Branch.name_get branch in
         let key = Params.key_get_list req in
         release_params ();
         Service.return_lwt (fun () ->
@@ -164,23 +162,32 @@ end) = struct
     module Client = struct
       module Ir = Api.Client.Irmin
 
-      let get t key =
+      let get t ?branch key =
         let open Ir.Get in
         let req, p = Capability.Request.create Params.init_pointer in
+        (match branch with
+        | Some br -> Params.branch_set p br
+        | None -> ());
         Params.key_set_list p key |> ignore;
         Capability.call_for_value_exn t method_id req >|= fun res ->
         Store.Contents.of_string (Results.result_get res)
 
-      let set t key value =
+      let set t ?branch key value =
         let open Ir.Set in
         let req, p = Capability.Request.create Params.init_pointer in
+        (match branch with
+        | Some br -> Params.branch_set p br
+        | None -> ());
         Params.key_set_list p key |> ignore;
         Params.value_set p (Fmt.to_to_string Store.Contents.pp value);
         Capability.call_for_value_exn t method_id req >|= Results.result_get
 
-      let remove t key: unit Lwt.t =
+      let remove t ?branch key: unit Lwt.t =
         let open Ir.Remove in
         let req, p = Capability.Request.create Params.init_pointer in
+        (match branch with
+        | Some br -> Params.branch_set p br
+        | None -> ());
         Params.key_set_list p key |> ignore;
         Capability.call_for_value_exn t method_id req >>= fun _ -> Lwt.return_unit
     end
