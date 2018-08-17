@@ -39,7 +39,8 @@ interface Irmin {
   master @0 () -> (result :Branch);
   getBranch @1 (name :Text) -> (result :Branch);
   get @2 (branch :Text, key :Text) -> (result :Data);
-  set @3 (branch :Text, key :Text, value :Data) -> (result :Bool);
-  remove @4 (branch :Text, key :Text) -> ();
+  set @3 (branch :Text, key :Text, value :Data, author :Text, message :Text) -> (result :Bool);
+  remove @4 (branch :Text, key :Text, author :Text, message :Text) -> ();
   getTree @5 (branch :Text, key :Text) -> (result :Tree);
+  setTree @6 (branch :Text, key :Text, tree :Tree, author :Text, message :Text) -> (result :Bool);
 }
