@@ -5,18 +5,23 @@ module Api = Irmin_api.MakeRPC(Capnp_rpc_lwt)
 type t = [ `Irmin_b2b5cb4fd15c7d5a ] Capability.t
 
 module type S = sig
-  module Store: Irmin.KV
+  module Store: Irmin.S
 
   val local: Store.repo -> t
 
   module Client: sig
-    val get: t -> ?branch:string -> Store.key -> (Store.contents, [`Msg of string]) result Lwt.t
-    val set: t -> ?branch:string -> Store.key -> Store.contents -> bool Lwt.t
-    val remove: t -> ?branch:string -> Store.key -> unit Lwt.t
+    val get: t -> ?branch:Store.branch -> Store.key -> (Store.contents, [`Msg of string]) result Lwt.t
+    val set: t -> ?branch:Store.branch -> Store.key -> Store.contents -> bool Lwt.t
+    val remove: t -> ?branch:Store.branch -> Store.key -> unit Lwt.t
   end
 end
 
-module Make(Store: Irmin.KV)(Info: sig
+exception Error_message of string
+let unwrap = function
+  | Ok x -> x
+  | Error (`Msg m) -> raise (Error_message m)
+
+module Make(Store: Irmin.S)(Info: sig
   val info: ?author:string -> ('a, Format.formatter, unit, Irmin.Info.f) format4 -> 'a
 end) = struct
   module Store = Store
@@ -35,7 +40,7 @@ end) = struct
         get_branch ()>>= fun t ->
         Store.Head.find t >>= function
         | Some head ->
-          Branch.name_set br "master";
+          Branch.name_set br "master" |> ignore;
           Commit.hash_set commit (Fmt.to_to_string Store.Commit.Hash.pp (Store.Commit.hash head));
           let i = Store.Commit.info head in
           Info.author_set info (Irmin.Info.author i);
@@ -49,7 +54,8 @@ end) = struct
     let rec to_tree tr key (tree: Store.tree): unit Lwt.t =
       let module Tree = Api.Builder.Irmin.Tree in
       let module Node = Api.Builder.Irmin.Node in
-      ignore @@ Tree.key_set_list tr key;
+      let ks = Fmt.to_to_string Store.Key.pp key in
+      ignore @@ Tree.key_set tr ks;
       Store.Tree.to_concrete tree >>= function
       | `Contents (contents, _) ->
           let _ = Tree.contents_set tr (Fmt.to_to_string Store.Contents.pp contents) in
@@ -57,9 +63,11 @@ end) = struct
       | `Tree l ->
           Lwt_list.map_p (fun (step, tree) ->
             let node = Node.init_root () in
-            Node.step_set node step;
+            let step_s = Fmt.to_to_string Store.Key.pp_step step in
+            Node.step_set node step_s;
             let tt = Node.tree_init node in
-            to_tree tt (Store.Key.rcons key step) (Store.Tree.of_concrete tree) >|= fun () -> node
+            let tree = Store.Tree.of_concrete tree in
+            to_tree tt (Store.Key.rcons key step) tree >|= fun () -> node
           ) l
           >>= fun l ->
             let _ = Tree.node_set_list tr l in Lwt.return_unit
@@ -72,7 +80,10 @@ end) = struct
         let open Ir.Get in
         let branch = Params.branch_get req in
         let branch = Store.Branch.of_string branch in
-        let key = Params.key_get_list req |> Store.Key.v in
+        let key = Params.key_get req
+          |> Store.Key.of_string
+          |> unwrap
+        in
         release_params ();
         Service.return_lwt (fun () ->
           let resp, results = Service.Response.create Results.init_pointer in
@@ -93,11 +104,12 @@ end) = struct
       method set_impl req release_params =
         let open Ir.Set in
         let branch = Params.branch_get req in
-        let key = Params.key_get_list req in
+        let key = Params.key_get req |> Store.Key.of_string |> unwrap in
         let value = Params.value_get req in
         release_params ();
         Service.return_lwt (fun () ->
           let resp, results = Service.Response.create Results.init_pointer in
+          let branch = Store.Branch.of_string branch |> unwrap in
           Store.of_branch ctx branch >>= fun t ->
           (match Store.Contents.of_string value with
           | Ok value ->
@@ -112,10 +124,11 @@ end) = struct
       method remove_impl req release_params =
         let open Ir.Remove in
         let branch = Params.branch_get req in
-        let key = Params.key_get_list req in
+        let key = Params.key_get req |> Store.Key.of_string |> unwrap in
         release_params ();
         Service.return_lwt (fun () ->
           let resp, _results = Service.Response.create Results.init_pointer in
+          let branch = Store.Branch.of_string branch |> unwrap in
           Store.of_branch ctx branch >>= fun t ->
           Store.remove t key ~info:(Info.info "set") >>= fun () ->
           Lwt.return_ok resp)
@@ -136,7 +149,7 @@ end) = struct
         let module Branch = Api.Builder.Irmin.Branch in
         let module Commit = Api.Builder.Irmin.Commit in
         let module Info = Api.Builder.Irmin.Info in
-        let name = Params.name_get req in
+        let name = Params.name_get req |> Store.Branch.of_string |> unwrap in
         release_params ();
         Service.return_lwt (fun () ->
           let resp, results = Service.Response.create Results.init_pointer in
@@ -148,10 +161,11 @@ end) = struct
         let module Tree = Api.Builder.Irmin.Tree in
         let module Node = Api.Builder.Irmin.Node in
         let branch = Params.branch_get req in
-        let key = Params.key_get_list req in
+        let key = Params.key_get req |> Store.Key.of_string |> unwrap in
         release_params ();
         Service.return_lwt (fun () ->
           let resp, results = Service.Response.create Results.init_pointer in
+          let branch = Store.Branch.of_string branch |> unwrap in
           Store.of_branch ctx branch >>= fun t ->
           Store.get_tree t key >>= fun tree ->
           let tr = Results.result_init results in
@@ -166,9 +180,12 @@ end) = struct
         let open Ir.Get in
         let req, p = Capability.Request.create Params.init_pointer in
         (match branch with
-        | Some br -> Params.branch_set p br
+        | Some br ->
+            let br = Fmt.to_to_string Store.Branch.pp br in
+            Params.branch_set p br
         | None -> ());
-        Params.key_set_list p key |> ignore;
+        let key_s = Fmt.to_to_string Store.Key.pp key in
+        Params.key_set p key_s |> ignore;
         Capability.call_for_value_exn t method_id req >|= fun res ->
         Store.Contents.of_string (Results.result_get res)
 
@@ -176,9 +193,12 @@ end) = struct
         let open Ir.Set in
         let req, p = Capability.Request.create Params.init_pointer in
         (match branch with
-        | Some br -> Params.branch_set p br
+        | Some br ->
+            let br = Fmt.to_to_string Store.Branch.pp br in
+            Params.branch_set p br
         | None -> ());
-        Params.key_set_list p key |> ignore;
+        let key_s = Fmt.to_to_string Store.Key.pp key in
+        Params.key_set p key_s |> ignore;
         Params.value_set p (Fmt.to_to_string Store.Contents.pp value);
         Capability.call_for_value_exn t method_id req >|= Results.result_get
 
@@ -186,9 +206,12 @@ end) = struct
         let open Ir.Remove in
         let req, p = Capability.Request.create Params.init_pointer in
         (match branch with
-        | Some br -> Params.branch_set p br
+        | Some br ->
+            let br = Fmt.to_to_string Store.Branch.pp br in
+            Params.branch_set p br
         | None -> ());
-        Params.key_set_list p key |> ignore;
+        let key_s = Fmt.to_to_string Store.Key.pp key in
+        Params.key_set p key_s |> ignore;
         Capability.call_for_value_exn t method_id req >>= fun _ -> Lwt.return_unit
     end
 end

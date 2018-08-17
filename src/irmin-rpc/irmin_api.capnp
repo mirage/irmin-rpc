@@ -29,7 +29,7 @@ interface Irmin {
   }
 
   struct Tree {
-      key @0 :List(Text);
+      key @0 :Text;
       union {
           contents @1 :Data;
           node @2 :List(Node);
@@ -38,8 +38,8 @@ interface Irmin {
 
   master @0 () -> (result :Branch);
   getBranch @1 (name :Text) -> (result :Branch);
-  get @2 (branch :Text, key :List(Text)) -> (result :Data);
-  set @3 (branch :Text, key :List(Text), value :Data) -> (result :Bool);
-  remove @4 (branch :Text, key :List(Text)) -> ();
-  getTree @5 (branch :Text, key :List(Text)) -> (result :Tree);
+  get @2 (branch :Text, key :Text) -> (result :Data);
+  set @3 (branch :Text, key :Text, value :Data) -> (result :Bool);
+  remove @4 (branch :Text, key :Text) -> ();
+  getTree @5 (branch :Text, key :Text) -> (result :Tree);
 }

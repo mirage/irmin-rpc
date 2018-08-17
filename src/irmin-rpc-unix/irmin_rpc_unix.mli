@@ -1,4 +1,4 @@
-module Make(Store: Irmin.KV): sig
+module Make(Store: Irmin.S): sig
   module Rpc: Irmin_rpc.S with module Store = Store
   module Server: sig
     type t
@@ -19,8 +19,8 @@ module Make(Store: Irmin.KV): sig
     type t = Irmin_rpc.t
 
     val connect: Uri.t -> t Lwt.t
-    val get: t -> ?branch:string -> Store.key -> (Store.contents, [`Msg of string]) result Lwt.t
-    val set: t -> ?branch:string -> Store.key -> Store.contents -> bool Lwt.t
-    val remove: t -> ?branch:string -> Store.key -> unit Lwt.t
+    val get: t -> ?branch:Store.branch -> Store.key -> (Store.contents, [`Msg of string]) result Lwt.t
+    val set: t -> ?branch:Store.branch -> Store.key -> Store.contents -> bool Lwt.t
+    val remove: t -> ?branch:Store.branch -> Store.key -> unit Lwt.t
   end
 end

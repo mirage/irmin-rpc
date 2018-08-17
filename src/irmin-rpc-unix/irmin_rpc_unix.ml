@@ -1,6 +1,6 @@
 open Lwt.Infix
 
-module Make(Store: Irmin.KV) = struct
+module Make(Store: Irmin.S) = struct
 
   module Rpc = Irmin_rpc.Make(Store)(struct
     let info = Irmin_unix.info
