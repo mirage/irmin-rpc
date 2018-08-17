@@ -2,7 +2,7 @@ irmin-rpc — CapNProto RPC server for Irmin
 -------------------------------------------------------------------------------
 %%VERSION%%
 
-irmin-rpc is a Cap'N'Protoc RPC server and client for Irmin. It allows for remote Irmin stores to be easily queried and modified.
+irmin-rpc is a Cap'N'Proto RPC server and client for Irmin. It allows for remote Irmin stores to be easily queried and modified.
 
 irmin-rpc is distributed under the ISC license.
 
