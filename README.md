@@ -23,7 +23,11 @@ instructions.
 
 ## Example server
 
-The example below will start a server on `127.0.0.1:9999` and run it until the process is killed.
+The example below will start a server on `127.0.0.1:9999` and run it until the process is killed. To run this example execute:
+
+```shell
+$ dune exec examples/server.exe
+```
 
 ```ocaml
 open Lwt.Infix
@@ -34,7 +38,7 @@ module Rpc = Irmin_rpc_unix.Make(Store)
 let main =
     Store.Repo.v (Irmin_mem.config ()) >>= fun repo ->
     Rpc.Server.create ~secret_key:`Ephemeral (`TCP ("127.0.0.1", 9999)) repo >>= fun server ->
-    Printf.printf "Serving on: %s" (Uri.to_string (Rpc.Server.uri src));
+    Printf.printf "Serving on: %s" (Uri.to_string (Rpc.Server.uri server));
     Rpc.Server.run server
 
 let () = Lwt_main.run main
@@ -42,7 +46,11 @@ let () = Lwt_main.run main
 
 ## Example client
 
-This example shows how to connect to the server using the provided client.
+This example shows how to connect to the server using the provided client. To run this example execute:
+
+```shell
+$ dune exec examples/client.exe
+```
 
 ```ocaml
 open Lwt.Infix
@@ -54,10 +62,10 @@ module Rpc = Irmin_rpc_unix.Make(Store)
 let uri = "capnp://sha-256:YIhQi5oAx0XAUJc7XnbhbNooKDds0LV9zbtsepd3X6A@127.0.0.1:9999/WUNVqiE4hrUdV6GvTvnKq6yg-8xVvJmILcLlwPUVldo"
 
 let main =
-    Rpc.Client.connect uri >>= fun client ->
-    Rpc.Client.set client ["abc"] "123" >>= fun () ->
-    Rpc.Client.get client ["abc"] >>= function
-    | Ok res -> assert (res = "123")
+    Rpc.Client.connect (Uri.of_string uri) >>= fun client ->
+    Rpc.Client.set client ["abc"] "123" >>= fun _ ->
+    Rpc.Client.get client ["abc"] >|= function
+    | Ok res -> assert (res = "123"); print_endline res
     | Error _ -> print_endline "Error encountered"
 
 let () = Lwt_main.run main

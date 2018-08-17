@@ -1,0 +1,7 @@
+(executables
+  (names client server)
+   (libraries checkseum.c digestif.c irmin-rpc-unix))
+
+(alias
+ (name examples)
+ (deps client.exe server.exe))
