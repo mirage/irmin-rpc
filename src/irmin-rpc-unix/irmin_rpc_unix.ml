@@ -20,7 +20,7 @@ module Make(Store: Irmin.KV) = struct
       Capnp_rpc_unix.serve config ~restore >|= fun vat ->
       {uri = Capnp_rpc_unix.Vat.sturdy_uri vat service_id}
 
-    let run _t = Lwt.wait ()
+    let run _t = fst @@ Lwt.wait ()
   end
 
   module Client = struct

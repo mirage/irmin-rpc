@@ -12,7 +12,7 @@ module Make(Store: Irmin.KV): sig
       Capnp_rpc_unix.Network.Location.t ->
       Store.repo -> t Lwt.t
 
-    val run: t -> 'a Lwt.t * 'a Lwt.u
+    val run: t -> 'a Lwt.t
   end
 
   module Client: sig
