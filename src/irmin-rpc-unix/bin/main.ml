@@ -12,7 +12,7 @@ let run host port root contents store =
   let p =
     Store.Repo.v (config root) >>= fun repo ->
     Rpc.Server.create ~secret_key:`Ephemeral (`TCP (host, port)) repo >>= fun server ->
-    Printf.printf "Serving on: %s" (Uri.to_string (Rpc.Server.uri server));
+    Printf.printf "Serving on: %s\n%!" (Uri.to_string (Rpc.Server.uri server));
     Rpc.Server.run server
   in Lwt_main.run p
 
