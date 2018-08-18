@@ -18,6 +18,8 @@ After that, you will most likely want to install irmin-rpc-unix:
 
     opam pin add irmin-rpc-unix https://github.com/zshipko/irmin-rpc.git
 
+This will also install a tool named `irmin-rpc` which can be used to run `irmin-rpc` servers from the command line!
+
 If you don't use `opam` consult the [`opam`](opam) file for build
 instructions.
 
