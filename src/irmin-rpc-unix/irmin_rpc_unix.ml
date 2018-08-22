@@ -26,18 +26,11 @@ module Make(Store: Irmin.S) = struct
   module Client = struct
     type t = Irmin_rpc.t
 
+    include Rpc.Client
+
     let connect uri =
       let client_vat = Capnp_rpc_unix.client_only_vat () in
       let sr = Capnp_rpc_unix.Vat.import_exn client_vat uri in
       Capnp_rpc_lwt.Sturdy_ref.connect_exn sr
-
-    let get t ?branch (key: Store.key) =
-      Rpc.Client.get t ?branch key
-
-    let set t ?branch key value =
-      Rpc.Client.set t ?branch key value
-
-    let remove t ?branch key =
-      Rpc.Client.remove t ?branch key
   end
 end

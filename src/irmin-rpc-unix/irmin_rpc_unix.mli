@@ -17,10 +17,8 @@ module Make(Store: Irmin.S): sig
 
   module Client: sig
     type t = Irmin_rpc.t
-
     val connect: Uri.t -> t Lwt.t
-    val get: t -> ?branch:Store.branch -> Store.key -> (Store.contents, [`Msg of string]) result Lwt.t
-    val set: t -> ?branch:Store.branch -> Store.key -> Store.contents -> bool Lwt.t
-    val remove: t -> ?branch:Store.branch -> Store.key -> unit Lwt.t
+
+    include Irmin_rpc.CLIENT with module Store = Store
   end
 end
