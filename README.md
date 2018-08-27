@@ -28,7 +28,7 @@ instructions.
 The example below will start a server on `127.0.0.1:9999` and run it until the process is killed. To run this example execute:
 
 ```shell
-$ dune exec examples/server.exe
+$ dune exec examples/server.exe --secret-key ./key.pem
 ```
 
 ```ocaml

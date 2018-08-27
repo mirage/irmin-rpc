@@ -37,7 +37,7 @@ end) = struct
   let local ctx =
     let module Ir = Api.Service.Irmin in
 
-    let to_commit commit cm =
+    let encode_commit commit cm =
         let module Commit = Api.Builder.Irmin.Commit in
         let module Info = Api.Builder.Irmin.Info in
         let info = Commit.info_init commit in
@@ -49,7 +49,7 @@ end) = struct
     in
 
     (* Get branch by name and convert it to a capnproto Branch object *)
-    let to_branch ?branch br =
+    let encode_branch ?branch br =
         let module Branch = Api.Builder.Irmin.Branch in
         let commit = Branch.head_init br in
         let get_branch () = match branch with None -> Store.master ctx | Some name -> Store.of_branch ctx name in
@@ -57,7 +57,7 @@ end) = struct
         Store.Head.find t >>= function
         | Some head ->
           Branch.name_set br "master" |> ignore;
-          to_commit commit head;
+          encode_commit commit head;
           Lwt.return_some br
         | None -> Lwt.return_none
     in
@@ -140,7 +140,7 @@ end) = struct
             Store.set t key value ~info:(Info.info ~author "%s" message) >>= fun () ->
             Store.Head.get t >>= fun head ->
             let commit = Results.result_init results in
-            to_commit commit head;
+            encode_commit commit head;
             Lwt.return_unit
           | Error _ -> Lwt.return_unit) >>= fun _ ->
           Lwt.return_ok resp)
@@ -158,7 +158,7 @@ end) = struct
           Store.remove t key ~info:(Info.info ~author "%s" message) >>= fun () ->
           Store.Head.get t >>= fun head ->
           let commit = Results.result_init results in
-          to_commit commit head;
+          encode_commit commit head;
           Lwt.return_ok resp)
 
       method master_impl _req release_params =
@@ -170,7 +170,7 @@ end) = struct
         Service.return_lwt (fun () ->
           let resp, results = Service.Response.create Results.init_pointer in
           let br = Results.result_init results in
-          to_branch br >>= fun _ -> Lwt.return_ok resp)
+          encode_branch br >>= fun _ -> Lwt.return_ok resp)
 
       method get_branch_impl req release_params =
         let open Ir.GetBranch in
@@ -182,7 +182,7 @@ end) = struct
         Service.return_lwt (fun () ->
           let resp, results = Service.Response.create Results.init_pointer in
           let br = Results.result_init results in
-          to_branch ~branch:name br >>= fun _ -> Lwt.return_ok resp)
+          encode_branch ~branch:name br >>= fun _ -> Lwt.return_ok resp)
 
       method get_tree_impl req release_params =
         let open Ir.GetTree in
@@ -216,7 +216,7 @@ end) = struct
           Store.set_tree t key tree ~info:(Info.info ~author "%s" message) >>= fun () ->
           Store.Head.get t >>= fun head ->
           let commit = Results.result_init results in
-          to_commit commit head;
+          encode_commit commit head;
           Lwt.return_ok resp)
 
       method clone_impl req release_params =
@@ -229,7 +229,7 @@ end) = struct
           Store.of_branch ctx branch >>= fun t ->
           Sync.fetch_exn t remote >>= fun head ->
           let commit = Results.result_init results in
-          to_commit commit head;
+          encode_commit commit head;
           Lwt.return_ok resp
         )
 
@@ -258,7 +258,7 @@ end) = struct
           Sync.pull_exn t remote (`Merge info) >>= fun () ->
           Store.Head.get t >>= fun head ->
           let commit = Results.result_init results in
-          to_commit commit head;
+          encode_commit commit head;
           Lwt.return_ok resp
         )
 
@@ -278,7 +278,7 @@ end) = struct
           | Ok () ->
             Store.Head.get t >>= fun head ->
             let commit = Results.result_init results in
-            to_commit commit head;
+            encode_commit commit head;
             Lwt.return_ok resp
           | Error e ->
               let msg = (Fmt.to_to_string (Irmin.Type.pp_json Irmin.Merge.conflict_t) e) in
