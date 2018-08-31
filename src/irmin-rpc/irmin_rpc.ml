@@ -115,14 +115,13 @@ end) = struct
         Service.return_lwt (fun () ->
           let resp, results = Service.Response.create Results.init_pointer in
           Store.of_branch ctx branch >>= fun t ->
-          Store.find t key >>= fun value ->
-            begin
-              match value with
-              | Some value ->
-                Results.result_set results (Fmt.to_to_string Store.Contents.pp value)
-              | None -> ()
-            end;
-          Lwt.return_ok resp)
+          Store.find t key >>= function
+          | Some value ->
+              Results.result_set results (Fmt.to_to_string Store.Contents.pp value);
+              Lwt.return_ok resp
+          | None ->
+            let err = Capnp_rpc.Error.exn ~ty:`Failed "%s" "Not found" in
+            Lwt.return_error err)
 
       method set_impl req release_params =
         let open Ir.Set in

@@ -7,3 +7,4 @@ tmp
 *.native
 *.byte
 *.merlin
+examples/mirage
