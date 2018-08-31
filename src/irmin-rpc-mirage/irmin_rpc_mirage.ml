@@ -1,8 +1,12 @@
 open Lwt.Infix
 
-module Make(Store: Irmin.S)(Clock: Mirage_clock_lwt.PCLOCK)(Time: Mirage_time_lwt.S)(Stack : Mirage_stack_lwt.V4) = struct
-  module Dns = Dns_resolver_mirage.Make(Time)(Stack)
-
+module Make
+    (Store: Irmin.S)
+    (Clock: Mirage_clock_lwt.PCLOCK)
+    (Network: Mirage_net_lwt.S)
+    (Stack : Mirage_stack_lwt.V4)
+    (Dns : Dns_resolver_mirage.S)
+= struct
   module Capnp_rpc_mirage = Capnp_rpc_mirage.Make(Stack)(Dns)
 
   module Server(C: sig val clock: Clock.t end) = struct
@@ -23,9 +27,8 @@ module Make(Store: Irmin.S)(Clock: Mirage_clock_lwt.PCLOCK)(Time: Mirage_time_lw
 
     let uri {uri;_} = uri
 
-    let create ~secret_key ?serve_tls ?(port = 1111) stack ~addr repo =
-      let dns = Dns.create stack in
-      let net = Capnp_rpc_mirage.network ~dns stack in
+    let create ~secret_key ?serve_tls ?(port = 1111) stack dns ~addr repo =
+      let net = Capnp_rpc_mirage.Network.{stack; dns} in
       let public_address = `TCP (addr, port) in
       let config = Capnp_rpc_mirage.Vat_config.create ~secret_key ?serve_tls ~public_address (`TCP port) in
       let service_id = Capnp_rpc_mirage.Vat_config.derived_id config "main" in
@@ -51,9 +54,8 @@ module Make(Store: Irmin.S)(Clock: Mirage_clock_lwt.PCLOCK)(Time: Mirage_time_lw
 
     include Rpc.Client
 
-    let connect stack uri =
-      let dns = Dns.create stack in
-      let net = Capnp_rpc_mirage.network ~dns stack in
+    let connect stack dns uri =
+      let net = Capnp_rpc_mirage.Network.{stack; dns} in
       let client_vat = Capnp_rpc_mirage.client_only_vat net in
       let sr = Capnp_rpc_mirage.Vat.import_exn client_vat uri in
       Capnp_rpc_lwt.Sturdy_ref.connect_exn sr

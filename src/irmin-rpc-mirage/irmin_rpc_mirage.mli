@@ -1,6 +1,10 @@
-module Make(Store: Irmin.S)(Clock : Mirage_clock_lwt.PCLOCK)(Time : Mirage_time_lwt.S)(Stack : Mirage_stack_lwt.V4): sig
-  module Dns: Dns_resolver_mirage.S
-
+module Make
+    (Store: Irmin.S)
+    (Clock: Mirage_clock_lwt.PCLOCK)
+    (Network: Mirage_net_lwt.S)
+    (Stack : Mirage_stack_lwt.V4)
+    (Dns : Dns_resolver_mirage.S)
+: sig
   module Server(C: sig val clock: Clock.t end): sig
     module Rpc: Irmin_rpc.S with module Store = Store
 
@@ -11,7 +15,8 @@ module Make(Store: Irmin.S)(Clock : Mirage_clock_lwt.PCLOCK)(Time : Mirage_time_
       secret_key: [< `PEM of string | `Ephemeral] ->
       ?serve_tls: bool ->
       ?port:int ->
-      Dns.stack ->
+      Stack.t ->
+      Dns.t ->
       addr:string ->
       Store.repo -> t Lwt.t
 
@@ -21,7 +26,7 @@ module Make(Store: Irmin.S)(Clock : Mirage_clock_lwt.PCLOCK)(Time : Mirage_time_
   module Client(C: sig val clock: Clock.t end): sig
     module Rpc: Irmin_rpc.S with module Store = Store
     type t = Irmin_rpc.t
-    val connect: Dns.stack -> Uri.t -> t Lwt.t
+    val connect: Stack.t -> Dns.t -> Uri.t -> t Lwt.t
 
     include Irmin_rpc.CLIENT with module Store = Store
   end
