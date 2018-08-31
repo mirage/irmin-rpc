@@ -1,4 +1,3 @@
-open Irmin_rpc_mirage
 open Lwt.Infix
 
 module Store = Irmin_mem.KV(Irmin.Contents.String)

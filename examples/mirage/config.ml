@@ -5,8 +5,6 @@ let main =
   ~packages:[
     package "duration";
     package "irmin-rpc-mirage";
-    package "digestif.ocaml";
-    package "charrua-client-mirage";
   ]
   ~deps:[
     abstract nocrypto;
