@@ -15,6 +15,10 @@ module type CLIENT = sig
     val pull: t -> ?branch:Store.branch -> ?author:string -> ?message:string -> string -> Store.Commit.hash Lwt.t
     val push: t -> ?branch:Store.branch -> string -> unit Lwt.t
     val merge: t -> ?branch:Store.branch -> ?author:string -> ?message:string -> Store.branch -> (Store.Commit.hash, Irmin.Merge.conflict) result Lwt.t
+    val commit_info: t -> Store.Commit.Hash.t -> Irmin.Info.t Lwt.t
+    val snapshot: ?branch:Store.branch -> t -> (Store.Commit.Hash.t, [`Msg of string]) result Lwt.t
+    val revert: t -> ?branch:Store.branch -> Store.Commit.Hash.t -> bool Lwt.t
+    val branches: t -> Store.branch list Lwt.t
 end
 
 module type S = sig
@@ -270,6 +274,45 @@ end) = struct
               let err = Capnp_rpc.Error.exn ~ty:`Failed "%s" msg in
               Lwt.return_error err
         )
+
+      method snapshot_impl req release_params =
+        let open Ir.Snapshot in
+        let branch = Params.branch_get req |> Store.Branch.of_string |> unwrap in
+        release_params ();
+        Service.return_lwt (fun () ->
+          Store.of_branch ctx branch >>= fun t ->
+          Store.Head.get t >>= fun commit ->
+          let resp, results = Service.Response.create Results.init_pointer in
+          Results.result_set results (Store.Commit.hash commit |> Fmt.to_to_string Store.Commit.Hash.pp);
+          Lwt.return_ok resp
+        )
+
+      method revert_impl req release_params =
+        let open Ir.Revert in
+        let branch = Params.branch_get req |> Store.Branch.of_string |> unwrap in
+        let commit = Params.hash_get req |> Store.Commit.Hash.of_string |> unwrap in
+        release_params ();
+        Service.return_lwt (fun () ->
+          let resp, results = Service.Response.create Results.init_pointer in
+          Store.of_branch ctx branch >>= fun t ->
+          (Store.Commit.of_hash ctx commit >>= function
+            | Some commit ->
+                Store.Head.set t commit >|= fun () ->
+                Results.result_set results true
+            | None -> Results.result_set results false; Lwt.return_unit) >>= fun () ->
+          Lwt.return_ok resp
+        )
+
+       method branches_impl _req release_params =
+         let open Ir.Branches in
+         release_params();
+         Service.return_lwt (fun () ->
+          let resp, results = Service.Response.create Results.init_pointer in
+          Store.Branch.list ctx  >>= fun branches ->
+          let l = List.map (fun x -> Fmt.to_to_string Store.Branch.pp x) branches in
+          let _ = Results.result_set_list results l in
+          Lwt.return_ok resp
+        )
     end
 
     module Client = struct
@@ -443,6 +486,52 @@ end) = struct
             let err = Fmt.to_to_string Capnp_rpc.Error.pp err in
             let decoder = Jsonm.decoder (`String err) in
             Error (Irmin.Type.decode_json Irmin.Merge.conflict_t decoder |> unwrap)
+
+        let commit_info t hash =
+          let open Ir.CommitInfo in
+          let req, p = Capability.Request.create Params.init_pointer in
+          Params.hash_set p (Fmt.to_to_string Store.Commit.Hash.pp hash);
+          Capability.call_for_value_exn t method_id req >|= fun res ->
+          let info = Results.result_get res in
+          let module Info = Api.Reader.Irmin.Info in
+          let author = Info.author_get info in
+          let date = Info.date_get info in
+          let message = Info.message_get info in
+          Irmin.Info.v ~date ~author message
+
+        let snapshot ?branch t =
+          let open Ir.Snapshot in
+          let req, p = Capability.Request.create Params.init_pointer in
+          (match branch with
+          | Some br ->
+              let br = Fmt.to_to_string Store.Branch.pp br in
+              Params.branch_set p br
+          | None -> ());
+          Capability.call_for_value_exn t method_id req >|= fun res ->
+          let commit = Results.result_get res in
+          Store.Commit.Hash.of_string commit
+
+        let revert t ?branch hash =
+          let open Ir.Revert in
+          let req, p = Capability.Request.create Params.init_pointer in
+          (match branch with
+          | Some br ->
+              let br = Fmt.to_to_string Store.Branch.pp br in
+              Params.branch_set p br
+          | None -> ());
+          Params.hash_set p (Fmt.to_to_string Store.Commit.Hash.pp hash);
+          Capability.call_for_value_exn t method_id req >|= fun res ->
+          Results.result_get res
+
+        let branches t =
+          let open Ir.Branches in
+          let req, _ = Capability.Request.create Params.init_pointer in
+          Capability.call_for_value_exn t method_id req >>= fun res ->
+          let l = Results.result_get_list res in
+          Lwt_list.filter_map_s (fun x ->
+            match Store.Branch.of_string x with
+            | Ok b -> Lwt.return_some b
+            | Error _ -> Lwt.return_none) l
     end
 end
 

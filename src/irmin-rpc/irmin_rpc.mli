@@ -11,6 +11,10 @@ module type CLIENT = sig
     val pull: t -> ?branch:Store.branch -> ?author:string -> ?message:string -> string -> Store.Commit.hash Lwt.t
     val push: t -> ?branch:Store.branch -> string -> unit Lwt.t
     val merge: t -> ?branch:Store.branch -> ?author:string -> ?message:string -> Store.branch -> (Store.Commit.hash, Irmin.Merge.conflict) result Lwt.t
+    val commit_info: t -> Store.Commit.Hash.t -> Irmin.Info.t Lwt.t
+    val snapshot: ?branch:Store.branch -> t -> (Store.Commit.Hash.t, [`Msg of string]) result Lwt.t
+    val revert: t -> ?branch:Store.branch -> Store.Commit.Hash.t -> bool Lwt.t
+    val branches: t -> Store.branch list Lwt.t
 end
 
 module type S = sig

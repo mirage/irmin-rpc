@@ -47,4 +47,7 @@ interface Irmin {
   clone @7 (branch :Text, remote :Text) -> (result :Commit);
   merge @8 (branchFrom :Text, branchInto :Text, author :Text, message :Text) -> (result :Commit);
   commitInfo @9 (hash :Data) -> (result :Info);
+  snapshot @10 (branch :Text) -> (result :Data);
+  revert @11 (branch :Text, hash :Data) -> (result :Bool);
+  branches @12 () -> (result :List(Text));
 }
