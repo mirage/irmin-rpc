@@ -36,29 +36,6 @@ end) = struct
   module Store = Store
   module Sync = Irmin.Sync(Store)
 
-  let encode_commit commit cm =
-    let module Commit = Api.Builder.Irmin.Commit in
-    let module Info = Api.Builder.Irmin.Info in
-    let info = Commit.info_init commit in
-    Commit.hash_set commit (Fmt.to_to_string Store.Commit.Hash.pp (Store.Commit.hash cm));
-    let i = Store.Commit.info cm in
-    Info.author_set info (Irmin.Info.author i);
-    Info.message_set info (Irmin.Info.message i);
-    Info.date_set info (Irmin.Info.date i)
-
-  (* Get branch by name and convert it to a capnproto Branch object *)
-  let encode_branch ctx ?branch br =
-      let module Branch = Api.Builder.Irmin.Branch in
-      let commit = Branch.head_init br in
-      let get_branch () = match branch with None -> Store.master ctx | Some name -> Store.of_branch ctx name in
-      get_branch ()>>= fun t ->
-      Store.Head.find t >>= function
-      | Some head ->
-        Branch.name_set br "master" |> ignore;
-        encode_commit commit head;
-        Lwt.return_some br
-      | None -> Lwt.return_none
-
   (* Convert a Store.tree to capnproto Tree object *)
   let rec encode_tree tr key (tree: Store.tree): unit Lwt.t =
     let module Tree = Api.Builder.Irmin.Tree in
@@ -95,6 +72,23 @@ end) = struct
         let c = Store.Contents.of_string c |> unwrap in
         `Contents (c, Store.Metadata.default)
     | Undefined _ -> `Tree []
+
+  let encode_commit_info cm info =
+    let module Info = Api.Builder.Irmin.Info in
+    let i = Store.Commit.info cm in
+    Info.author_set info (Irmin.Info.author i);
+    Info.message_set info (Irmin.Info.message i);
+    Info.date_set info (Irmin.Info.date i)
+
+  let encode_commit commit cm =
+    let module Commit = Api.Builder.Irmin.Commit in
+    let module Info = Api.Builder.Irmin.Info in
+    let info = Commit.info_init commit in
+    Commit.hash_set commit (Fmt.to_to_string Store.Commit.Hash.pp (Store.Commit.hash cm));
+    let tr = Commit.tree_init commit in
+    Store.Commit.tree cm >>= fun tree ->
+    encode_tree tr Store.Key.empty tree >|= fun () ->
+    encode_commit_info cm info
 
   let local ctx =
     let module Ir = Api.Service.Irmin in
@@ -136,8 +130,7 @@ end) = struct
             Store.set t key value ~info:(Info.info ~author "%s" message) >>= fun () ->
             Store.Head.get t >>= fun head ->
             let commit = Results.result_init results in
-            encode_commit commit head;
-            Lwt.return_unit
+            encode_commit commit head
           | Error _ -> Lwt.return_unit) >>= fun _ ->
           Lwt.return_ok resp)
 
@@ -154,31 +147,8 @@ end) = struct
           Store.remove t key ~info:(Info.info ~author "%s" message) >>= fun () ->
           Store.Head.get t >>= fun head ->
           let commit = Results.result_init results in
-          encode_commit commit head;
+          encode_commit commit head >>= fun () ->
           Lwt.return_ok resp)
-
-      method master_impl _req release_params =
-        let open Ir.Master in
-        let module Branch = Api.Builder.Irmin.Branch in
-        let module Commit = Api.Builder.Irmin.Commit in
-        let module Info = Api.Builder.Irmin.Info in
-        release_params ();
-        Service.return_lwt (fun () ->
-          let resp, results = Service.Response.create Results.init_pointer in
-          let br = Results.result_init results in
-          encode_branch ctx br >>= fun _ -> Lwt.return_ok resp)
-
-      method get_branch_impl req release_params =
-        let open Ir.GetBranch in
-        let module Branch = Api.Builder.Irmin.Branch in
-        let module Commit = Api.Builder.Irmin.Commit in
-        let module Info = Api.Builder.Irmin.Info in
-        let name = Params.name_get req |> Store.Branch.of_string |> unwrap in
-        release_params ();
-        Service.return_lwt (fun () ->
-          let resp, results = Service.Response.create Results.init_pointer in
-          let br = Results.result_init results in
-          encode_branch ctx ~branch:name br >>= fun _ -> Lwt.return_ok resp)
 
       method get_tree_impl req release_params =
         let open Ir.GetTree in
@@ -212,7 +182,7 @@ end) = struct
           Store.set_tree t key tree ~info:(Info.info ~author "%s" message) >>= fun () ->
           Store.Head.get t >>= fun head ->
           let commit = Results.result_init results in
-          encode_commit commit head;
+          encode_commit commit head >>= fun () ->
           Lwt.return_ok resp)
 
       method clone_impl req release_params =
@@ -225,7 +195,7 @@ end) = struct
           Store.of_branch ctx branch >>= fun t ->
           Sync.fetch_exn t remote >>= fun head ->
           let commit = Results.result_init results in
-          encode_commit commit head;
+          encode_commit commit head >>= fun () ->
           Lwt.return_ok resp
         )
 
@@ -254,7 +224,7 @@ end) = struct
           Sync.pull_exn t remote (`Merge info) >>= fun () ->
           Store.Head.get t >>= fun head ->
           let commit = Results.result_init results in
-          encode_commit commit head;
+          encode_commit commit head >>= fun () ->
           Lwt.return_ok resp
         )
 
@@ -274,10 +244,29 @@ end) = struct
           | Ok () ->
             Store.Head.get t >>= fun head ->
             let commit = Results.result_init results in
-            encode_commit commit head;
+            encode_commit commit head >>= fun () ->
             Lwt.return_ok resp
           | Error e ->
               let msg = (Fmt.to_to_string (Irmin.Type.pp_json Irmin.Merge.conflict_t) e) in
+              let err = Capnp_rpc.Error.exn ~ty:`Failed "%s" msg in
+              Lwt.return_error err
+        )
+
+      method commit_info_impl req release_params =
+        let open Ir.CommitInfo in
+        let hash = Params.hash_get req in
+        release_params ();
+        Service.return_lwt (fun () ->
+          match Store.Commit.Hash.of_string hash with
+          | Ok hash ->
+              let resp, results = Service.Response.create Results.init_pointer in
+              (Store.Commit.of_hash ctx hash >>= function
+              | Some c ->
+                let info = Results.result_init results in
+                encode_commit_info c info;
+                Lwt.return_ok resp
+              | None -> Lwt.return_ok resp)
+          | Error (`Msg msg) ->
               let err = Capnp_rpc.Error.exn ~ty:`Failed "%s" msg in
               Lwt.return_error err
         )

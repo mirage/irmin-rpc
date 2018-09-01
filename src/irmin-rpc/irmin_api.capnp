@@ -6,12 +6,6 @@ interface Irmin {
       head @1 :Commit;
   }
 
-  struct Commit {
-      hash @0 :Data;
-      info @1 :Info;
-      parents @2 :List(Commit);
-  }
-
   struct Info {
       author @0 :Text;
       message @1 :Text;
@@ -36,15 +30,21 @@ interface Irmin {
       }
   }
 
-  master @0 () -> (result :Branch);
-  getBranch @1 (name :Text) -> (result :Branch);
-  get @2 (branch :Text, key :Text) -> (result :Data);
-  set @3 (branch :Text, key :Text, value :Data, author :Text, message :Text) -> (result :Commit);
-  remove @4 (branch :Text, key :Text, author :Text, message :Text) -> (result :Commit);
-  getTree @5 (branch :Text, key :Text) -> (result :Tree);
-  setTree @6 (branch :Text, key :Text, tree :Tree, author :Text, message :Text) -> (result :Commit);
-  push @7 (branch :Text, remote :Text) -> ();
-  pull @8 (branch :Text, remote :Text, author :Text, message :Text) -> (result :Commit);
-  clone @9 (branch :Text, remote :Text) -> (result :Commit);
-  merge @10 (branchFrom :Text, branchInto :Text, author :Text, message :Text) -> (result :Commit);
+  struct Commit {
+      hash @0 :Data;
+      info @1 :Info;
+      parents @2 :List(Commit);
+      tree @3 :Tree;
+  }
+
+  get @0 (branch :Text, key :Text) -> (result :Data);
+  set @1 (branch :Text, key :Text, value :Data, author :Text, message :Text) -> (result :Commit);
+  remove @2 (branch :Text, key :Text, author :Text, message :Text) -> (result :Commit);
+  getTree @3 (branch :Text, key :Text) -> (result :Tree);
+  setTree @4 (branch :Text, key :Text, tree :Tree, author :Text, message :Text) -> (result :Commit);
+  push @5 (branch :Text, remote :Text) -> ();
+  pull @6 (branch :Text, remote :Text, author :Text, message :Text) -> (result :Commit);
+  clone @7 (branch :Text, remote :Text) -> (result :Commit);
+  merge @8 (branchFrom :Text, branchInto :Text, author :Text, message :Text) -> (result :Commit);
+  commitInfo @9 (hash :Data) -> (result :Info);
 }
