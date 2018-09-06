@@ -5,20 +5,21 @@ module Api = Irmin_api.MakeRPC(Capnp_rpc_lwt)
 type t = [ `Irmin_b2b5cb4fd15c7d5a ] Capability.t
 
 module type CLIENT = sig
-    module Store: Irmin.S
-    val get: t -> ?branch:Store.branch -> Store.key -> (Store.contents, [`Msg of string]) result Lwt.t
-    val get_tree: t -> ?branch:Store.branch -> Store.key -> Store.tree Lwt.t
-    val set: t -> ?branch:Store.branch -> ?author:string -> ?message:string -> Store.key -> Store.contents -> Store.Commit.hash Lwt.t
-    val set_tree: t -> ?branch:Store.branch -> ?author:string -> ?message:string -> Store.key -> Store.tree -> Store.Commit.hash Lwt.t
-    val remove: t -> ?branch:Store.branch -> ?author:string -> ?message:string -> Store.key -> Store.Commit.hash Lwt.t
-    val clone: t -> ?branch:Store.branch -> string -> Store.Commit.hash Lwt.t
-    val pull: t -> ?branch:Store.branch -> ?author:string -> ?message:string -> string -> Store.Commit.hash Lwt.t
-    val push: t -> ?branch:Store.branch -> string -> unit Lwt.t
-    val merge: t -> ?branch:Store.branch -> ?author:string -> ?message:string -> Store.branch -> (Store.Commit.hash, Irmin.Merge.conflict) result Lwt.t
-    val commit_info: t -> Store.Commit.Hash.t -> Irmin.Info.t Lwt.t
-    val snapshot: ?branch:Store.branch -> t -> (Store.Commit.Hash.t, [`Msg of string]) result Lwt.t
-    val revert: t -> ?branch:Store.branch -> Store.Commit.Hash.t -> bool Lwt.t
-    val branches: t -> Store.branch list Lwt.t
+  module Store: Irmin.S
+  val get: t -> ?branch:Store.branch -> Store.key -> (Store.contents, [`Msg of string]) result Lwt.t
+  val get_tree: t -> ?branch:Store.branch -> Store.key -> Store.tree Lwt.t
+  val set: t -> ?branch:Store.branch -> ?author:string -> ?message:string -> Store.key -> Store.contents -> Store.Commit.hash Lwt.t
+  val set_tree: t -> ?branch:Store.branch -> ?author:string -> ?message:string -> Store.key -> Store.tree -> Store.Commit.hash Lwt.t
+  val remove: t -> ?branch:Store.branch -> ?author:string -> ?message:string -> Store.key -> Store.Commit.hash Lwt.t
+  val clone: t -> ?branch:Store.branch -> string -> Store.Commit.hash Lwt.t
+  val pull: t -> ?branch:Store.branch -> ?author:string -> ?message:string -> string -> Store.Commit.hash Lwt.t
+  val push: t -> ?branch:Store.branch -> string -> unit Lwt.t
+  val merge: t -> ?branch:Store.branch -> ?author:string -> ?message:string -> Store.branch -> (Store.Commit.hash, Irmin.Merge.conflict) result Lwt.t
+  val commit_info: t -> Store.Commit.Hash.t -> Irmin.Info.t Lwt.t
+  val snapshot: ?branch:Store.branch -> t -> (Store.Commit.Hash.t, [`Msg of string]) result Lwt.t
+  val revert: t -> ?branch:Store.branch -> Store.Commit.Hash.t -> bool Lwt.t
+  val branches: t -> Store.branch list Lwt.t
+  val commit_history: t -> Store.Commit.Hash.t -> Store.Commit.Hash.t list Lwt.t
 end
 
 module type S = sig
@@ -305,7 +306,7 @@ end) = struct
 
        method branches_impl _req release_params =
          let open Ir.Branches in
-         release_params();
+         release_params ();
          Service.return_lwt (fun () ->
           let resp, results = Service.Response.create Results.init_pointer in
           Store.Branch.list ctx  >>= fun branches ->
@@ -313,6 +314,26 @@ end) = struct
           let _ = Results.result_set_list results l in
           Lwt.return_ok resp
         )
+
+        method commit_history_impl req release_params =
+          let open Ir.CommitHistory in
+          let commit = Params.hash_get req |> Store.Commit.Hash.of_string |> unwrap in
+          release_params ();
+          Service.return_lwt (fun () ->
+            let resp, results = Service.Response.create Results.init_pointer in
+            (Store.Commit.of_hash ctx commit >>= function
+              | Some commit ->
+                  Store.Commit.parents commit >>= Lwt_list.map_p (fun commit ->
+                    Fmt.to_to_string Store.Commit.Hash.pp (Store.Commit.hash commit)
+                    |> Lwt.return
+                  ) >|= fun l ->
+                  ignore (Results.result_set_list results l)
+              | None ->
+                  ignore (Results.result_set_list results []);
+                  Lwt.return_unit
+            ) >>= fun () ->
+            Lwt.return_ok resp
+          )
     end
 
     module Client = struct
@@ -530,6 +551,17 @@ end) = struct
           let l = Results.result_get_list res in
           Lwt_list.filter_map_s (fun x ->
             match Store.Branch.of_string x with
+            | Ok b -> Lwt.return_some b
+            | Error _ -> Lwt.return_none) l
+
+        let commit_history t hash =
+          let open Ir.CommitHistory in
+          let req, p = Capability.Request.create Params.init_pointer in
+          Params.hash_set p ( Fmt.to_to_string Store.Commit.Hash.pp hash);
+          Capability.call_for_value_exn t method_id req >>= fun res ->
+          let l = Results.result_get_list res in
+          Lwt_list.filter_map_s (fun x ->
+            match Store.Commit.Hash.of_string x with
             | Ok b -> Lwt.return_some b
             | Error _ -> Lwt.return_none) l
     end

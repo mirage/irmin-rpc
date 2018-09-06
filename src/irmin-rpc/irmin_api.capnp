@@ -50,4 +50,5 @@ interface Irmin {
   snapshot @10 (branch :Text) -> (result :Data);
   revert @11 (branch :Text, hash :Data) -> (result :Bool);
   branches @12 () -> (result :List(Text));
+  commitHistory @13 (hash :Data) -> (result :List(Data));
 }
