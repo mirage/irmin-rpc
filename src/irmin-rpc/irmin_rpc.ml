@@ -340,6 +340,25 @@ end) = struct
       module Store = Store
       module Ir = Api.Client.Irmin
 
+      let branch_param branch_set p branch =
+        match branch with
+        | Some br ->
+            let br = Fmt.to_to_string Store.Branch.pp br in
+            branch_set p br
+        | None -> ()
+
+      let author_param author_set p author =
+        match author with
+        | Some author ->
+            author_set p author
+        | _ -> ()
+
+      let message_param message_set p message =
+        match message with
+        | Some message ->
+            message_set p message
+        | _ -> ()
+
       let get t ?branch key =
         let open Ir.Get in
         let req, p = Capability.Request.create Params.init_pointer in
@@ -356,11 +375,7 @@ end) = struct
       let get_tree t ?branch key =
         let open Ir.GetTree in
         let req, p = Capability.Request.create Params.init_pointer in
-        (match branch with
-        | Some br ->
-            let br = Fmt.to_to_string Store.Branch.pp br in
-            Params.branch_set p br
-        | None -> ());
+        branch_param Params.branch_set p branch;
         let key_s = Fmt.to_to_string Store.Key.pp key in
         Params.key_set p key_s |> ignore;
         Capability.call_for_value_exn t method_id req >|= fun res ->
@@ -369,19 +384,9 @@ end) = struct
       let set t ?branch ?author ?message key value =
         let open Ir.Set in
         let req, p = Capability.Request.create Params.init_pointer in
-        (match branch with
-        | Some br ->
-            let br = Fmt.to_to_string Store.Branch.pp br in
-            Params.branch_set p br
-        | None -> ());
-        (match author with
-        | Some author ->
-            Params.author_set p author
-        | _ -> ());
-        (match message with
-        | Some message ->
-            Params.message_set p message
-        | _ -> ());
+        branch_param Params.branch_set p branch;
+        author_param Params.author_set p author;
+        message_param Params.message_set p message;
         let key_s = Fmt.to_to_string Store.Key.pp key in
         Params.key_set p key_s |> ignore;
         Params.value_set p (Fmt.to_to_string Store.Contents.pp value);
@@ -392,19 +397,9 @@ end) = struct
       let set_tree t ?branch ?author ?message key tree =
         let open Ir.SetTree in
         let req, p = Capability.Request.create Params.init_pointer in
-        (match branch with
-        | Some br ->
-            let br = Fmt.to_to_string Store.Branch.pp br in
-            Params.branch_set p br
-        | None -> ());
-        (match author with
-        | Some author ->
-            Params.author_set p author
-        | _ -> ());
-        (match message with
-        | Some message ->
-            Params.message_set p message
-        | _ -> ());
+        branch_param Params.branch_set p branch;
+        author_param Params.author_set p author;
+        message_param Params.message_set p message;
         let key_s = Fmt.to_to_string Store.Key.pp key in
         Params.key_set p key_s |> ignore;
         let tr = Params.tree_init p in
@@ -416,19 +411,9 @@ end) = struct
       let remove t ?branch ?author ?message key =
         let open Ir.Remove in
         let req, p = Capability.Request.create Params.init_pointer in
-        (match branch with
-        | Some br ->
-            let br = Fmt.to_to_string Store.Branch.pp br in
-            Params.branch_set p br
-        | None -> ());
-        (match author with
-        | Some author ->
-            Params.author_set p author
-        | _ -> ());
-        (match message with
-        | Some message ->
-            Params.message_set p message
-        | _ -> ());
+        branch_param Params.branch_set p branch;
+        author_param Params.author_set p author;
+        message_param Params.message_set p message;
         let key_s = Fmt.to_to_string Store.Key.pp key in
         Params.key_set p key_s |> ignore;
         Capability.call_for_value_exn t method_id req >|= fun res ->
@@ -438,11 +423,7 @@ end) = struct
       let clone t ?branch remote =
         let open Ir.Clone in
         let req, p = Capability.Request.create Params.init_pointer in
-        (match branch with
-        | Some br ->
-            let br = Fmt.to_to_string Store.Branch.pp br in
-            Params.branch_set p br
-        | None -> ());
+        branch_param Params.branch_set p branch;
         Params.remote_set p remote;
         Capability.call_for_value_exn t method_id req >|= fun res ->
         let commit = Results.result_get res in
@@ -451,19 +432,9 @@ end) = struct
       let pull t ?branch ?author ?message remote =
         let open Ir.Pull in
         let req, p = Capability.Request.create Params.init_pointer in
-        (match branch with
-        | Some br ->
-            let br = Fmt.to_to_string Store.Branch.pp br in
-            Params.branch_set p br
-        | None -> ());
-        (match author with
-        | Some author ->
-            Params.author_set p author
-        | _ -> ());
-        (match message with
-        | Some message ->
-            Params.message_set p message
-        | _ -> ());
+        branch_param Params.branch_set p branch;
+        author_param Params.author_set p author;
+        message_param Params.message_set p message;
         Params.remote_set p remote;
         Capability.call_for_value_exn t method_id req >|= fun res ->
         let commit = Results.result_get res in
@@ -472,32 +443,18 @@ end) = struct
       let push t ?branch  remote =
         let open Ir.Push in
          let req, p = Capability.Request.create Params.init_pointer in
-        (match branch with
-        | Some br ->
-            let br = Fmt.to_to_string Store.Branch.pp br in
-            Params.branch_set p br
-        | None -> ());
+        branch_param Params.branch_set p branch;
         Params.remote_set p remote;
         Capability.call_for_unit_exn t method_id req
 
       let merge t ?branch ?author ?message from_ =
         let open Ir.Merge in
         let req, p = Capability.Request.create Params.init_pointer in
-        (match branch with
-        | Some br ->
-            let br = Fmt.to_to_string Store.Branch.pp br in
-            Params.branch_into_set p br
-        | None -> ());
+        branch_param Params.branch_into_set p branch;
         let from_ = Fmt.to_to_string Store.Branch.pp from_ in
         Params.branch_from_set p from_;
-        (match author with
-        | Some author ->
-            Params.author_set p author
-        | _ -> ());
-        (match message with
-        | Some message ->
-            Params.message_set p message
-        | _ -> ());
+        author_param Params.author_set p author;
+        message_param Params.message_set p message;
         Capability.call_for_value t method_id req >|= fun res ->
         match res with
         | Ok res ->
@@ -508,62 +465,54 @@ end) = struct
             let decoder = Jsonm.decoder (`String err) in
             Error (Irmin.Type.decode_json Irmin.Merge.conflict_t decoder |> unwrap)
 
-        let commit_info t hash =
-          let open Ir.CommitInfo in
-          let req, p = Capability.Request.create Params.init_pointer in
-          Params.hash_set p (Fmt.to_to_string Store.Commit.Hash.pp hash);
-          Capability.call_for_value_exn t method_id req >|= fun res ->
-          let info = Results.result_get res in
-          let module Info = Api.Reader.Irmin.Info in
-          let author = Info.author_get info in
-          let date = Info.date_get info in
-          let message = Info.message_get info in
-          Irmin.Info.v ~date ~author message
+      let commit_info t hash =
+        let open Ir.CommitInfo in
+        let req, p = Capability.Request.create Params.init_pointer in
+        Params.hash_set p (Fmt.to_to_string Store.Commit.Hash.pp hash);
+        Capability.call_for_value_exn t method_id req >|= fun res ->
+        let info = Results.result_get res in
+        let module Info = Api.Reader.Irmin.Info in
+        let author = Info.author_get info in
+        let date = Info.date_get info in
+        let message = Info.message_get info in
+        Irmin.Info.v ~date ~author message
 
-        let snapshot ?branch t =
-          let open Ir.Snapshot in
-          let req, p = Capability.Request.create Params.init_pointer in
-          (match branch with
-          | Some br ->
-              let br = Fmt.to_to_string Store.Branch.pp br in
-              Params.branch_set p br
-          | None -> ());
-          Capability.call_for_value_exn t method_id req >|= fun res ->
-          let commit = Results.result_get res in
-          Store.Commit.Hash.of_string commit
+      let snapshot ?branch t =
+        let open Ir.Snapshot in
+        let req, p = Capability.Request.create Params.init_pointer in
+        branch_param Params.branch_set p branch;
+        Capability.call_for_value_exn t method_id req >|= fun res ->
+        let commit = Results.result_get res in
+        Store.Commit.Hash.of_string commit
 
-        let revert t ?branch hash =
-          let open Ir.Revert in
-          let req, p = Capability.Request.create Params.init_pointer in
-          (match branch with
-          | Some br ->
-              let br = Fmt.to_to_string Store.Branch.pp br in
-              Params.branch_set p br
-          | None -> ());
-          Params.hash_set p (Fmt.to_to_string Store.Commit.Hash.pp hash);
-          Capability.call_for_value_exn t method_id req >|= fun res ->
-          Results.result_get res
+      let revert t ?branch hash =
+        let open Ir.Revert in
+        let req, p = Capability.Request.create Params.init_pointer in
+        branch_param Params.branch_set p branch;
+        Params.hash_set p (Fmt.to_to_string Store.Commit.Hash.pp hash);
+        Capability.call_for_value_exn t method_id req >|= fun res ->
+        Results.result_get res
 
-        let branches t =
-          let open Ir.Branches in
-          let req, _ = Capability.Request.create Params.init_pointer in
-          Capability.call_for_value_exn t method_id req >>= fun res ->
-          let l = Results.result_get_list res in
-          Lwt_list.filter_map_s (fun x ->
-            match Store.Branch.of_string x with
-            | Ok b -> Lwt.return_some b
-            | Error _ -> Lwt.return_none) l
+      let branches t =
+        let open Ir.Branches in
+        let req, _ = Capability.Request.create Params.init_pointer in
+        Capability.call_for_value_exn t method_id req >>= fun res ->
+        let l = Results.result_get_list res in
+        Lwt_list.filter_map_s (fun x ->
+          match Store.Branch.of_string x with
+          | Ok b -> Lwt.return_some b
+          | Error _ -> Lwt.return_none) l
 
-        let commit_history t hash =
-          let open Ir.CommitHistory in
-          let req, p = Capability.Request.create Params.init_pointer in
-          Params.hash_set p ( Fmt.to_to_string Store.Commit.Hash.pp hash);
-          Capability.call_for_value_exn t method_id req >>= fun res ->
-          let l = Results.result_get_list res in
-          Lwt_list.filter_map_s (fun x ->
-            match Store.Commit.Hash.of_string x with
-            | Ok b -> Lwt.return_some b
-            | Error _ -> Lwt.return_none) l
+      let commit_history t hash =
+        let open Ir.CommitHistory in
+        let req, p = Capability.Request.create Params.init_pointer in
+        Params.hash_set p ( Fmt.to_to_string Store.Commit.Hash.pp hash);
+        Capability.call_for_value_exn t method_id req >>= fun res ->
+        let l = Results.result_get_list res in
+        Lwt_list.filter_map_s (fun x ->
+          match Store.Commit.Hash.of_string x with
+          | Ok b -> Lwt.return_some b
+          | Error _ -> Lwt.return_none) l
     end
 end
 
