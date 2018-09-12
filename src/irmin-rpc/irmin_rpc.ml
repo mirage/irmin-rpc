@@ -345,7 +345,7 @@ end) = struct
         | Some br ->
             let br = Fmt.to_to_string Store.Branch.pp br in
             branch_set p br
-        | None -> ()
+        | None -> branch_set p "master"
 
       let author_param author_set p author =
         match author with
@@ -362,11 +362,7 @@ end) = struct
       let get t ?branch key =
         let open Ir.Get in
         let req, p = Capability.Request.create Params.init_pointer in
-        (match branch with
-        | Some br ->
-            let br = Fmt.to_to_string Store.Branch.pp br in
-            Params.branch_set p br
-        | None -> ());
+        branch_param Params.branch_set p branch;
         let key_s = Fmt.to_to_string Store.Key.pp key in
         Params.key_set p key_s |> ignore;
         Capability.call_for_value_exn t method_id req >|= fun res ->
