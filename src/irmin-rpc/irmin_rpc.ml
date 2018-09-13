@@ -6,7 +6,7 @@ type t = [ `Irmin_b2b5cb4fd15c7d5a ] Capability.t
 
 module type CLIENT = sig
   module Store: Irmin.S
-  val get: t -> ?branch:Store.branch -> Store.key -> (Store.contents, [`Msg of string]) result Lwt.t
+  val get: t -> ?branch:Store.branch -> Store.key -> (Store.contents option, [`Msg of string]) result Lwt.t
   val get_tree: t -> ?branch:Store.branch -> Store.key -> Store.tree Lwt.t
   val set: t -> ?branch:Store.branch -> ?author:string -> ?message:string -> Store.key -> Store.contents -> Store.Commit.hash Lwt.t
   val set_tree: t -> ?branch:Store.branch -> ?author:string -> ?message:string -> Store.key -> Store.tree -> Store.Commit.hash Lwt.t
@@ -113,11 +113,12 @@ end) = struct
           Store.of_branch ctx branch >>= fun t ->
           Store.find t key >>= function
           | Some value ->
-              Results.result_set results (Fmt.to_to_string Store.Contents.pp value);
-              Lwt.return_ok resp
+            Results.result_set results (Fmt.to_to_string Store.Contents.pp value);
+            Lwt.return_ok resp
           | None ->
-            let err = Capnp_rpc.Error.exn ~ty:`Failed "%s" "Not found" in
-            Lwt.return_error err)
+            Lwt.return_ok resp)
+            (*let err = Capnp_rpc.Error.exn ~ty:`Failed "%s" "Not found" in
+            Lwt.return_error err)*)
 
       method set_impl req release_params =
         let open Ir.Set in
@@ -359,14 +360,22 @@ end) = struct
             message_set p message
         | _ -> ()
 
+      let error_message err = Error (`Msg (Fmt.to_to_string Capnp_rpc.Error.pp err))
+
+      let map_result f = function
+        | Ok res -> f res
+        | Error err -> error_message err
+
       let get t ?branch key =
         let open Ir.Get in
         let req, p = Capability.Request.create Params.init_pointer in
         branch_param Params.branch_set p branch;
         let key_s = Fmt.to_to_string Store.Key.pp key in
         Params.key_set p key_s |> ignore;
-        Capability.call_for_value_exn t method_id req >|= fun res ->
-        Store.Contents.of_string (Results.result_get res)
+        Capability.call_for_value t method_id req >|= map_result (fun res ->
+          if Results.has_result res then
+            Ok (Some (Store.Contents.of_string (Results.result_get res) |> unwrap))
+          else Ok None)
 
       let get_tree t ?branch key =
         let open Ir.GetTree in

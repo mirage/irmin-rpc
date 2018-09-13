@@ -1,5 +1,5 @@
 (executables
-    (libraries irmin-rpc-unix)
+    (libraries irmin-rpc-unix alcotest-lwt)
     (names test)
     (modules test))
 

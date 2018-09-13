@@ -6,20 +6,47 @@
 
 open Lwt.Infix
 
-module Store = Irmin_unix.Git.FS.KV(Irmin.Contents.String)
+module Store = Irmin_unix.Git.Mem.KV(Irmin.Contents.String)
 module Rpc = Irmin_rpc_unix.Make(Store)
 
-let addr = `TCP ("127.0.0.1", 7000)
-let secret_key = `Ephemeral
+let cfg = Irmin_mem.config ()
+
+let hash_s = Fmt.to_to_string Store.Commit.Hash.pp
+
+let test_set t _switch () =
+  Rpc.Client.set t ["a"; "b"; "c"] "123" ~message:"abc=>123" ~author:"test" >>= fun _ ->
+  Rpc.Client.get t ["a"; "b"; "c"] >|= function
+    | Ok (Some res) -> Alcotest.(check string) "get a/b/c" res "123"
+    | _ -> Alcotest.fail "a/b/c not set when it is expected to be set"
+
+let test_get_not_found t _switch () =
+  (Rpc.Client.get t ["abc"] >>= function
+    | Ok None -> Lwt.return_unit
+    | Ok _ -> Alcotest.fail "abc set when it is expected to be unset"
+    | Error (`Msg m) -> Alcotest.fail m)
+
+let test_remove t _switch () =
+  Rpc.Client.snapshot t >>= (function Ok hash -> Lwt.return hash | Error (`Msg msg) -> failwith msg)  >>= fun snapshot ->
+  (Rpc.Client.remove t ["abc"] >>= fun hash ->
+  Alcotest.(check string) "Check snapshot hash" (hash_s hash) (hash_s snapshot);
+  Rpc.Client.remove t ["a"; "b"; "c"] >>= fun hash ->
+  Alcotest.(check (neg string)) "Check snapshot hash after modification" (hash_s hash) (hash_s snapshot);
+  Lwt.return_unit)
+
+
+let local t = [
+  Alcotest_lwt.test_case "set" `Quick @@ test_set t;
+  Alcotest_lwt.test_case "get" `Quick @@ test_get_not_found t;
+  Alcotest_lwt.test_case "del" `Quick @@ test_remove t;
+]
 
 let main =
-  let cfg = Irmin_git.config "./tmp" in
-  Store.Repo.v cfg >>= fun repo ->
-  Rpc.Server.create ~secret_key addr repo >>= fun uri ->
-  Fmt.pr "Running at: %a@." Uri.pp_hum (Rpc.Server.uri uri);
-  fst @@ Lwt.wait ()
+  Store.Repo.v cfg >|= fun repo ->
+  Alcotest.run "RPC" [
+    "Local", local (Rpc.Rpc.local repo);
+  ]
 
-let _ = Lwt_main.run main
+let () = Lwt_main.run main
 
 
 (*---------------------------------------------------------------------------

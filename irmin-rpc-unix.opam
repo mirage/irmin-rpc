@@ -13,6 +13,7 @@ available: [ ocaml-version >= "4.03.0"]
 depends:
 [
     "dune" {build}
+    "alcotest-lwt" {test}
     "irmin-rpc"
     "irmin-unix"
     "capnp-rpc-unix"

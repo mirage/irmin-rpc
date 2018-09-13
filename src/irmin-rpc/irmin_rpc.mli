@@ -2,7 +2,7 @@ type t = [ `Irmin_b2b5cb4fd15c7d5a ] Capnp_rpc_lwt.Capability.t
 
 module type CLIENT = sig
   module Store: Irmin.S
-  val get: t -> ?branch:Store.branch -> Store.key -> (Store.contents, [`Msg of string]) result Lwt.t
+  val get: t -> ?branch:Store.branch -> Store.key -> (Store.contents option, [`Msg of string]) result Lwt.t
   val get_tree: t -> ?branch:Store.branch -> Store.key -> Store.tree Lwt.t
   val set: t -> ?branch:Store.branch -> ?author:string -> ?message:string -> Store.key -> Store.contents -> Store.Commit.hash Lwt.t
   val set_tree: t -> ?branch:Store.branch -> ?author:string -> ?message:string -> Store.key -> Store.tree -> Store.Commit.hash Lwt.t
