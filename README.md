@@ -1,27 +1,32 @@
-irmin-rpc — CapNProto RPC server for Irmin
+irmin-rpc — Cap'N'Proto RPC server for Irmin
 -------------------------------------------------------------------------------
 %%VERSION%%
 
-irmin-rpc is a Cap'N'Proto RPC server and client for Irmin. It allows for remote Irmin stores to be easily queried and modified.
+`irmin-rpc` is a Cap'N'Proto RPC server and client for Irmin. It allows for remote Irmin stores to be easily queried and modified using an API that is vert similar to the native Irmin API.
 
-irmin-rpc is distributed under the ISC license.
+`irmin-rpc` is distributed under the ISC license.
 
 Homepage: https://github.com/zshipko/irmin-rpc
 
 ## Installation
 
-irmin-rpc can be installed with `opam`:
+`irmin-rpc` can be installed with `opam`:
 
-    opam pin add irmin-rpc https://github.com/zshipko/irmin-rpc.git
+```shell
+$ opam pin add irmin-rpc https://github.com/zshipko/irmin-rpc.git
+```
 
-After that, you will most likely want to install irmin-rpc-unix:
+After that, you will most likely want to install `irmin-rpc-unix` or (`irmin-rpc-mirage`):
 
-    opam pin add irmin-rpc-unix https://github.com/zshipko/irmin-rpc.git
+```shell
+$ opam pin add irmin-rpc-unix https://github.com/zshipko/irmin-rpc.git
+```
 
-This will also install a tool named `irmin-rpc` which can be used to run `irmin-rpc` servers from the command line!
+This will also install a tool named `irmin-rpc` which can be used to run an RPC server from the command line! All that's needed to get an RPC server running is:
 
-If you don't use `opam` consult the [`opam`](opam) file for build
-instructions.
+```shell
+$ irmin-rpc --root /path/to/irmin/store
+```
 
 ## Example server
 
