@@ -43,9 +43,34 @@ let test_remove t _switch () =
 let test_revert t _switch () =
   match !commit with
   | Some commit ->
-    Rpc.Client.revert t commit >|= fun b ->
-    Alcotest.(check bool) "revert" b true
+    Rpc.Client.revert t commit >>= fun b ->
+    Alcotest.(check bool) "revert" b true;
+    Rpc.Client.get t ["a"; "b"; "c"] >|= fun res ->
+    Alcotest.(check string) "revert value" res "123"
   | None -> Alcotest.fail "Revert commit hash is not defined"
+
+let test_set_tree t _switch () =
+  let tree = Store.Tree.empty in
+  Store.Tree.add tree ["foo"; "a"] "1" >>= fun tree ->
+  Store.Tree.add tree ["foo"; "b"] "2" >>= fun tree ->
+  Store.Tree.add tree ["foot"; "c"] "3"  >>= fun tree ->
+  Rpc.Client.set_tree t ~author:"Testing" ~message:"Hello" [] tree >>= fun hash ->
+  Rpc.Client.get_tree t ["foo"] >>= fun tree' ->
+  Store.Tree.get_tree tree ["foo"] >>= fun tree ->
+  Store.Tree.diff tree tree' >>= fun diff ->
+  Alcotest.(check int) "tree diff" 0 (List.length diff);
+  Rpc.Client.commit_info t hash >|= fun info ->
+  Alcotest.(check string) "info author" "Testing" (Irmin.Info.author info);
+  Alcotest.(check string) "info message" "Hello" (Irmin.Info.message info)
+
+let test_pull t _switch () =
+  Rpc.Client.pull t "https://github.com/zshipko/irmin-rpc" >>= fun _hash ->
+  Rpc.Client.get t ["README.md"] >|= fun readme ->
+  let f = open_in "../../../README.md" in
+  let n = in_channel_length f in
+  let readme' = really_input_string f n in
+  close_in f;
+  Alcotest.(check string) "readme" readme readme'
 
 
 let local t = [
@@ -54,6 +79,8 @@ let local t = [
   Alcotest_lwt.test_case "get" `Quick @@ test_find_not_found t;
   Alcotest_lwt.test_case "del" `Quick @@ test_remove t;
   Alcotest_lwt.test_case "revert" `Quick @@ test_revert t;
+  Alcotest_lwt.test_case "get_tree/set_tree" `Quick @@ test_set_tree t;
+  Alcotest_lwt.test_case "pull" `Quick @@ test_pull t;
 ]
 
 let main =
