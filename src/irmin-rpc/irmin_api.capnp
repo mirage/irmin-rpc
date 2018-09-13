@@ -37,10 +37,10 @@ interface Irmin {
       tree @3 :Tree;
   }
 
-  get @0 (branch :Text, key :Text) -> (result :Data);
+  find @0 (branch :Text, key :Text) -> (result :Data);
   set @1 (branch :Text, key :Text, value :Data, author :Text, message :Text) -> (result :Commit);
   remove @2 (branch :Text, key :Text, author :Text, message :Text) -> (result :Commit);
-  getTree @3 (branch :Text, key :Text) -> (result :Tree);
+  findTree @3 (branch :Text, key :Text) -> (result :Tree);
   setTree @4 (branch :Text, key :Text, tree :Tree, author :Text, message :Text) -> (result :Commit);
   push @5 (branch :Text, remote :Text) -> ();
   pull @6 (branch :Text, remote :Text, author :Text, message :Text) -> (result :Commit);

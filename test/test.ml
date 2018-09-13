@@ -13,31 +13,47 @@ let cfg = Irmin_mem.config ()
 
 let hash_s = Fmt.to_to_string Store.Commit.Hash.pp
 
+let commit = ref None
+
+let test_snapshot_no_head t _switch () =
+  Lwt.catch (fun () ->
+    Rpc.Client.snapshot t >|= fun _ -> Alcotest.fail "Expected exception")
+  (fun _ -> Lwt.return_unit)
+
 let test_set t _switch () =
   Rpc.Client.set t ["a"; "b"; "c"] "123" ~message:"abc=>123" ~author:"test" >>= fun _ ->
-  Rpc.Client.get t ["a"; "b"; "c"] >|= function
-    | Ok (Some res) -> Alcotest.(check string) "get a/b/c" res "123"
+  Rpc.Client.find t ["a"; "b"; "c"] >|= function
+    | Some res -> Alcotest.(check string) "get a/b/c" res "123"
     | _ -> Alcotest.fail "a/b/c not set when it is expected to be set"
 
-let test_get_not_found t _switch () =
-  (Rpc.Client.get t ["abc"] >>= function
-    | Ok None -> Lwt.return_unit
-    | Ok _ -> Alcotest.fail "abc set when it is expected to be unset"
-    | Error (`Msg m) -> Alcotest.fail m)
+let test_find_not_found t _switch () =
+  (Rpc.Client.find t ["abc"] >>= function
+    | None -> Lwt.return_unit
+    | _ -> Alcotest.fail "abc set when it is expected to be unset")
 
 let test_remove t _switch () =
-  Rpc.Client.snapshot t >>= (function Ok hash -> Lwt.return hash | Error (`Msg msg) -> failwith msg)  >>= fun snapshot ->
+  Rpc.Client.snapshot t >>= fun snapshot ->
+  commit := Some snapshot;
   (Rpc.Client.remove t ["abc"] >>= fun hash ->
   Alcotest.(check string) "Check snapshot hash" (hash_s hash) (hash_s snapshot);
   Rpc.Client.remove t ["a"; "b"; "c"] >>= fun hash ->
   Alcotest.(check (neg string)) "Check snapshot hash after modification" (hash_s hash) (hash_s snapshot);
   Lwt.return_unit)
 
+let test_revert t _switch () =
+  match !commit with
+  | Some commit ->
+    Rpc.Client.revert t commit >|= fun b ->
+    Alcotest.(check bool) "revert" b true
+  | None -> Alcotest.fail "Revert commit hash is not defined"
+
 
 let local t = [
+  Alcotest_lwt.test_case "snapshot (no head)" `Quick @@ test_snapshot_no_head t;
   Alcotest_lwt.test_case "set" `Quick @@ test_set t;
-  Alcotest_lwt.test_case "get" `Quick @@ test_get_not_found t;
+  Alcotest_lwt.test_case "get" `Quick @@ test_find_not_found t;
   Alcotest_lwt.test_case "del" `Quick @@ test_remove t;
+  Alcotest_lwt.test_case "revert" `Quick @@ test_revert t;
 ]
 
 let main =
