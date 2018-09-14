@@ -6,10 +6,11 @@
 
 open Lwt.Infix
 
-module Store = Irmin_unix.Git.Mem.KV(Irmin.Contents.String)
+module Store = Irmin_unix.Git.FS.KV(Irmin.Contents.String)
 module Rpc = Irmin_rpc_unix.Make(Store)
 
-let cfg = Irmin_mem.config ()
+let _ = Unix.system "rm -rf db"
+let cfg = Irmin_git.config "db"
 
 let hash_s = Fmt.to_to_string Store.Commit.Hash.pp
 
