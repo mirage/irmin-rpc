@@ -183,7 +183,7 @@ end) = struct
         let branch = Params.branch_get req |> Store.Branch.of_string |> unwrap in
         let key = Params.key_get req |> Store.Key.of_string |> unwrap in
         let tree = Params.tree_get req in
-        let message = if Params.has_message req then Params.message_get req else "remove" in
+        let message = if Params.has_message req then Params.message_get req else "set_tree" in
         let author = if Params.has_author req then Params.author_get req else "irmin-rpc" in
         release_params ();
         Service.return_lwt (fun () ->
@@ -236,7 +236,7 @@ end) = struct
         let open Ir.Pull in
         let remote = Params.remote_get req |> Irmin.remote_uri in
         let branch = Params.branch_get req |> Store.Branch.of_string |> unwrap in
-        let message = if Params.has_message req then Params.message_get req else "remove" in
+        let message = if Params.has_message req then Params.message_get req else "pull" in
         let author = if Params.has_author req then Params.author_get req else "irmin-rpc" in
         release_params ();
         let info = Info.info ~author "%s" message in
@@ -245,10 +245,15 @@ end) = struct
           Store.of_branch ctx branch >>= fun t ->
           Sync.pull t remote (`Merge info) >>= function
             | Ok () ->
-              Store.Head.get t >>= fun head ->
-              let commit = Results.result_init results in
-              encode_commit commit head >>= fun () ->
-              Lwt.return_ok resp
+              Store.Head.find t >>= (function
+                | Some head ->
+                  let commit = Results.result_init results in
+                  encode_commit commit head >>= fun () ->
+                  Lwt.return_ok resp
+                | None ->
+
+                  let err = Capnp_rpc.Error.exn ~ty:`Failed "No head" in
+                  Lwt.return_error err)
             | Error (`Msg message) ->
               let err = Capnp_rpc.Error.exn ~ty:`Failed "%s" message in
               Lwt.return_error err
@@ -267,7 +272,7 @@ end) = struct
         let open Ir.Merge in
         let from_ = Params.branch_from_get req |> Store.Branch.of_string |> unwrap in
         let into_ = Params.branch_into_get req |> Store.Branch.of_string |> unwrap in
-        let message = if Params.has_message req then Params.message_get req else "remove" in
+        let message = if Params.has_message req then Params.message_get req else "merge" in
         let author = if Params.has_author req then Params.author_get req else "irmin-rpc" in
         release_params ();
         let info = Info.info ~author "%s" message in

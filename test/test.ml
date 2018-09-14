@@ -9,6 +9,9 @@ open Lwt.Infix
 module Store = Irmin_unix.Git.FS.KV(Irmin.Contents.String)
 module Rpc = Irmin_rpc_unix.Make(Store)
 
+let _ =
+Logs.set_reporter (Logs.format_reporter ())
+
 let _ = Unix.system "rm -rf db"
 let cfg = Irmin_git.config "db"
 
@@ -65,14 +68,15 @@ let test_set_tree t _switch () =
   Alcotest.(check string) "info message" "Hello" (Irmin.Info.message info)
 
 let test_pull t _switch () =
-  Rpc.Client.pull t "git://github.com/zshipko/irmin-rpc.git" >>= fun _hash ->
-  Rpc.Client.get t ["README.md"] >|= fun readme ->
-  let f = open_in "../../../README.md" in
-  let n = in_channel_length f in
-  let readme' = really_input_string f n in
-  close_in f;
-  Alcotest.(check string) "readme" readme readme'
-
+  Rpc.Client.pull t "git://github.com/zshipko/irmin-rpc.git" >>= function
+    | Ok _ ->
+      Rpc.Client.get t ["README.md"] >|= fun readme ->
+      let f = open_in "../../../README.md" in
+      let n = in_channel_length f in
+      let readme' = really_input_string f n in
+      close_in f;
+      Alcotest.(check string) "readme" readme readme'
+    | Error (`Msg e) -> Alcotest.fail e
 
 let local t = [
   Alcotest_lwt.test_case "snapshot (no head)" `Quick @@ test_snapshot_no_head t;
