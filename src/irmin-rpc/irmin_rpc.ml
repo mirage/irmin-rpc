@@ -13,9 +13,9 @@ module type CLIENT = sig
   val set: t -> ?branch:Store.branch -> ?author:string -> ?message:string -> Store.key -> Store.contents -> Store.Commit.hash Lwt.t
   val set_tree: t -> ?branch:Store.branch -> ?author:string -> ?message:string -> Store.key -> Store.tree -> Store.Commit.hash Lwt.t
   val remove: t -> ?branch:Store.branch -> ?author:string -> ?message:string -> Store.key -> Store.Commit.hash Lwt.t
-  val clone: t -> ?branch:Store.branch -> string -> Store.Commit.hash Lwt.t
-  val pull: t -> ?branch:Store.branch -> ?author:string -> ?message:string -> string -> Store.Commit.hash Lwt.t
-  val push: t -> ?branch:Store.branch -> string -> unit Lwt.t
+  val clone: t -> ?branch:Store.branch -> string -> (Store.Commit.hash, [`Msg of string]) result Lwt.t
+  val pull: t -> ?branch:Store.branch -> ?author:string -> ?message:string -> string -> (Store.Commit.hash, [`Msg of string]) result Lwt.t
+  val push: t -> ?branch:Store.branch -> string -> (unit, [`Msg of string]) result Lwt.t
   val merge: t -> ?branch:Store.branch -> ?author:string -> ?message:string -> Store.branch -> (Store.Commit.hash, Irmin.Merge.conflict) result Lwt.t
   val commit_info: t -> Store.Commit.Hash.t -> Irmin.Info.t Lwt.t
   val snapshot: ?branch:Store.branch -> t -> Store.Commit.Hash.t Lwt.t
@@ -209,8 +209,10 @@ end) = struct
               let commit = Results.result_init results in
               encode_commit commit head >>= fun () ->
               Lwt.return_ok resp
-            | Error _ ->
-              Lwt.return_ok resp
+            | Error err ->
+              let s = Fmt.to_to_string Sync.pp_fetch_error err in
+              let err = Capnp_rpc.Error.exn ~ty:`Failed "%s" s in
+              Lwt.return_error err
         )
 
       method push_impl req release_params =
@@ -221,8 +223,14 @@ end) = struct
         Service.return_lwt (fun () ->
           let resp, _result = Service.Response.create Results.init_pointer in
           Store.of_branch ctx branch >>= fun t ->
-          Sync.push_exn t remote >>= fun () ->
-          Lwt.return_ok resp)
+          Sync.push t remote >>= function
+            | Ok () ->
+              Lwt.return_ok resp
+            | Error err ->
+              let s = Fmt.to_to_string Sync.pp_push_error err in
+              let err = Capnp_rpc.Error.exn ~ty:`Failed "%s" s in
+              Lwt.return_error err
+        )
 
       method pull_impl req release_params =
         let open Ir.Pull in
@@ -235,11 +243,24 @@ end) = struct
         Service.return_lwt (fun () ->
           let resp, results = Service.Response.create Results.init_pointer in
           Store.of_branch ctx branch >>= fun t ->
-          Sync.pull_exn t remote (`Merge info) >>= fun () ->
-          Store.Head.get t >>= fun head ->
-          let commit = Results.result_init results in
-          encode_commit commit head >>= fun () ->
-          Lwt.return_ok resp
+          Sync.pull t remote (`Merge info) >>= function
+            | Ok () ->
+              Store.Head.get t >>= fun head ->
+              let commit = Results.result_init results in
+              encode_commit commit head >>= fun () ->
+              Lwt.return_ok resp
+            | Error (`Msg message) ->
+              let err = Capnp_rpc.Error.exn ~ty:`Failed "%s" message in
+              Lwt.return_error err
+            | Error `No_head ->
+              let err = Capnp_rpc.Error.exn ~ty:`Failed "No head" in
+              Lwt.return_error err
+            | Error `Not_available ->
+              let err = Capnp_rpc.Error.exn ~ty:`Failed "Not available" in
+              Lwt.return_error err
+            | Error (`Conflict _) ->
+              let err = Capnp_rpc.Error.exn ~ty:`Failed "Conflict" in
+              Lwt.return_error err
         )
 
       method merge_impl req release_params =
@@ -444,11 +465,13 @@ end) = struct
         let req, p = Capability.Request.create Params.init_pointer in
         branch_param Params.branch_set p branch;
         Params.remote_set p remote;
-        Capability.call_for_value_exn t method_id req >|= fun res ->
-          if Results.has_result res then
+        Capability.call_for_value t method_id req >|= function
+          | Ok res ->
             let commit = Results.result_get res in
-            Api.Reader.Irmin.Commit.hash_get commit |> Store.Commit.Hash.of_string |> unwrap
-          else raise (Error_message ("Unable to clone from: " ^ remote))
+            Ok (Api.Reader.Irmin.Commit.hash_get commit |> Store.Commit.Hash.of_string |> unwrap)
+          | Error err ->
+            let s = Fmt.to_to_string Capnp_rpc.Error.pp err in
+            Error (`Msg s)
 
       let pull t ?branch ?author ?message remote =
         let open Ir.Pull in
@@ -457,16 +480,24 @@ end) = struct
         author_param Params.author_set p author;
         message_param Params.message_set p message;
         Params.remote_set p remote;
-        Capability.call_for_value_exn t method_id req >|= fun res ->
-        let commit = Results.result_get res in
-        (Api.Reader.Irmin.Commit.hash_get commit |> Store.Commit.Hash.of_string |> unwrap)
+        Capability.call_for_value t method_id req >|= function
+          | Ok res ->
+            let commit = Results.result_get res in
+            Ok (Api.Reader.Irmin.Commit.hash_get commit |> Store.Commit.Hash.of_string |> unwrap)
+          | Error err ->
+              let s = Fmt.to_to_string Capnp_rpc.Error.pp err in
+              Error (`Msg s)
 
       let push t ?branch  remote =
         let open Ir.Push in
-         let req, p = Capability.Request.create Params.init_pointer in
+        let req, p = Capability.Request.create Params.init_pointer in
         branch_param Params.branch_set p branch;
         Params.remote_set p remote;
-        Capability.call_for_unit_exn t method_id req
+        Capability.call_for_unit t method_id req >|= function
+          | Ok () -> Ok ()
+          | Error err ->
+              let s = Fmt.to_to_string Capnp_rpc.Error.pp err in
+              Error (`Msg s)
 
       let merge t ?branch ?author ?message from_ =
         let open Ir.Merge in
