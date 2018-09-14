@@ -64,7 +64,7 @@ let test_set_tree t _switch () =
   Alcotest.(check string) "info message" "Hello" (Irmin.Info.message info)
 
 let test_pull t _switch () =
-  Rpc.Client.pull t "https://github.com/zshipko/irmin-rpc" >>= fun _hash ->
+  Rpc.Client.pull t "git://github.com/zshipko/irmin-rpc.git" >>= fun _hash ->
   Rpc.Client.get t ["README.md"] >|= fun readme ->
   let f = open_in "../../../README.md" in
   let n = in_channel_length f in
