@@ -6,7 +6,7 @@
 
 open Lwt.Infix
 
-module Store = Irmin_unix.Git.FS.KV(Irmin.Contents.String)
+module Store = Irmin_unix.Git.Mem.KV(Irmin.Contents.String)
 module Rpc = Irmin_rpc_unix.Make(Store)
 
 let _ =
@@ -37,12 +37,15 @@ let test_find_not_found t _switch () =
 
 let test_remove t _switch () =
   Rpc.Client.snapshot t >>= fun snapshot ->
-  commit := Some snapshot;
-  (Rpc.Client.remove t ["abc"] >>= fun hash ->
-  Alcotest.(check string) "Check snapshot hash" (hash_s hash) (hash_s snapshot);
-  Rpc.Client.remove t ["a"; "b"; "c"] >>= fun hash ->
-  Alcotest.(check (neg string)) "Check snapshot hash after modification" (hash_s hash) (hash_s snapshot);
-  Lwt.return_unit)
+  commit := snapshot;
+  match snapshot with
+  | Some snapshot ->
+    (Rpc.Client.remove t ["abc"] >>= fun hash ->
+    Alcotest.(check string) "Check snapshot hash" (hash_s hash) (hash_s snapshot);
+    Rpc.Client.remove t ["a"; "b"; "c"] >>= fun hash ->
+    Alcotest.(check (neg string)) "Check snapshot hash after modification" (hash_s hash) (hash_s snapshot);
+    Lwt.return_unit)
+  | None -> Alcotest.fail "Expected commit"
 
 let test_revert t _switch () =
   match !commit with
@@ -63,13 +66,18 @@ let test_set_tree t _switch () =
   Store.Tree.get_tree tree ["foo"] >>= fun tree ->
   Store.Tree.diff tree tree' >>= fun diff ->
   Alcotest.(check int) "tree diff" 0 (List.length diff);
-  Rpc.Client.commit_info t hash >|= fun info ->
-  Alcotest.(check string) "info author" "Testing" (Irmin.Info.author info);
-  Alcotest.(check string) "info message" "Hello" (Irmin.Info.message info)
+  Rpc.Client.commit_info t hash >|= function
+    | Some info ->
+      Alcotest.(check string) "info author" "Testing" (Irmin.Info.author info);
+      Alcotest.(check string) "info message" "Hello" (Irmin.Info.message info)
+    | None -> Alcotest.fail "Expected commit info"
 
+  (* TODO: look into why this fails when run with [opam install --build-test]
+     but not [dune runtest] *)
 let test_pull t _switch () =
   Rpc.Client.pull t "git://github.com/zshipko/irmin-rpc.git" >>= function
-    | Ok _ ->
+    | Ok _hash ->
+      Lwt_unix.sleep 1. >>= fun () ->
       Rpc.Client.get t ["README.md"] >|= fun readme ->
       let f = open_in "../../../README.md" in
       let n = in_channel_length f in
