@@ -17,8 +17,8 @@ module type CLIENT = sig
   val pull: t -> ?branch:Store.branch -> ?author:string -> ?message:string -> string -> (Store.Commit.hash, [`Msg of string]) result Lwt.t
   val push: t -> ?branch:Store.branch -> string -> (unit, [`Msg of string]) result Lwt.t
   val merge: t -> ?branch:Store.branch -> ?author:string -> ?message:string -> Store.branch -> (Store.Commit.hash, Irmin.Merge.conflict) result Lwt.t
-  val commit_info: t -> Store.Commit.Hash.t -> Irmin.Info.t Lwt.t
-  val snapshot: ?branch:Store.branch -> t -> Store.Commit.Hash.t Lwt.t
+  val commit_info: t -> Store.Commit.Hash.t -> Irmin.Info.t option Lwt.t
+  val snapshot: ?branch:Store.branch -> t -> Store.Commit.Hash.t option Lwt.t
   val revert: t -> ?branch:Store.branch -> Store.Commit.Hash.t -> bool Lwt.t
   val branches: t -> Store.branch list Lwt.t
   val commit_history: t -> Store.Commit.Hash.t -> Store.Commit.Hash.t list Lwt.t
@@ -251,7 +251,6 @@ end) = struct
                   encode_commit commit head >>= fun () ->
                   Lwt.return_ok resp
                 | None ->
-
                   let err = Capnp_rpc.Error.exn ~ty:`Failed "No head" in
                   Lwt.return_error err)
             | Error (`Msg message) ->
@@ -533,8 +532,8 @@ end) = struct
             let author = Info.author_get info in
             let date = Info.date_get info in
             let message = Info.message_get info in
-            Irmin.Info.v ~date ~author message
-          else raise (Error_message "Invalid commit")
+            Some (Irmin.Info.v ~date ~author message)
+          else None
 
       let snapshot ?branch t =
         let open Ir.Snapshot in
@@ -543,8 +542,8 @@ end) = struct
         Capability.call_for_value_exn t method_id req >|= fun res ->
           if Results.has_result res then
             let commit = Results.result_get res in
-            Store.Commit.Hash.of_string commit |> unwrap
-          else raise (Error_message "No head")
+            Some (Store.Commit.Hash.of_string commit |> unwrap)
+          else None
 
       let revert t ?branch hash =
         let open Ir.Revert in
