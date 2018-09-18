@@ -44,9 +44,9 @@ RUN opam config exec -- opam pin add irmin-rpc-unix . --locked
 FROM alpine
 EXPOSE 9090
 COPY --from=base /home/opam/.opam/4.07/bin/irmin-rpc .
-COPY --from=base /usr/lib/* /usr/lib/
-ENTRYPOINT [ "/irmin-rpc" ]
+COPY --from=base /usr/lib/libgmp* /usr/lib/
 VOLUME /data
+ENTRYPOINT [ "/irmin-rpc" ]
 CMD [ "-a", "0.0.0.0", \
       "-p", "9090", \
       "-s", "git", \
