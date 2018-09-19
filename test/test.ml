@@ -5,14 +5,13 @@
   ---------------------------------------------------------------------------*)
 
 open Lwt.Infix
+module Store = Irmin_unix.Git.Mem.KV (Irmin.Contents.String)
+module Rpc = Irmin_rpc_unix.Make (Store)
 
-module Store = Irmin_unix.Git.Mem.KV(Irmin.Contents.String)
-module Rpc = Irmin_rpc_unix.Make(Store)
-
-let _ =
-Logs.set_reporter (Logs.format_reporter ())
+let _ = Logs.set_reporter (Logs.format_reporter ())
 
 let _ = Unix.system "rm -rf db"
+
 let cfg = Irmin_git.config "db"
 
 let hash_s = Fmt.to_to_string Store.Commit.Hash.pp
@@ -20,90 +19,139 @@ let hash_s = Fmt.to_to_string Store.Commit.Hash.pp
 let commit = ref None
 
 let test_snapshot_no_head t _switch () =
-  Lwt.catch (fun () ->
-    Rpc.Client.snapshot t >|= fun _ -> Alcotest.fail "Expected exception")
-  (fun _ -> Lwt.return_unit)
+  Lwt.catch
+    (fun () ->
+      Rpc.Client.snapshot t >|= fun _ -> Alcotest.fail "Expected exception" )
+    (fun _ -> Lwt.return_unit)
+
 
 let test_set t _switch () =
-  Rpc.Client.set t ["a"; "b"; "c"] "123" ~message:"abc=>123" ~author:"test" >>= fun _ ->
-  Rpc.Client.find t ["a"; "b"; "c"] >|= function
-    | Some res -> Alcotest.(check string) "get a/b/c" res "123"
-    | _ -> Alcotest.fail "a/b/c not set when it is expected to be set"
+  Rpc.Client.set t ["a"; "b"; "c"] "123" ~message:"abc=>123" ~author:"test"
+  >>= fun _ ->
+  Rpc.Client.find t ["a"; "b"; "c"]
+  >|= function
+  | Some res ->
+      Alcotest.(check string) "get a/b/c" res "123"
+  | _ ->
+      Alcotest.fail "a/b/c not set when it is expected to be set"
+
 
 let test_find_not_found t _switch () =
-  (Rpc.Client.find t ["abc"] >>= function
-    | None -> Lwt.return_unit
-    | _ -> Alcotest.fail "abc set when it is expected to be unset")
+  Rpc.Client.find t ["abc"]
+  >>= function
+  | None ->
+      Lwt.return_unit
+  | _ ->
+      Alcotest.fail "abc set when it is expected to be unset"
+
 
 let test_remove t _switch () =
-  Rpc.Client.snapshot t >>= fun snapshot ->
+  Rpc.Client.snapshot t
+  >>= fun snapshot ->
   commit := snapshot;
   match snapshot with
   | Some snapshot ->
-    (Rpc.Client.remove t ["abc"] >>= fun hash ->
-    Alcotest.(check string) "Check snapshot hash" (hash_s hash) (hash_s snapshot);
-    Rpc.Client.remove t ["a"; "b"; "c"] >>= fun hash ->
-    Alcotest.(check (neg string)) "Check snapshot hash after modification" (hash_s hash) (hash_s snapshot);
-    Lwt.return_unit)
-  | None -> Alcotest.fail "Expected commit"
+      Rpc.Client.remove t ["abc"]
+      >>= fun hash ->
+      Alcotest.(check string)
+        "Check snapshot hash" (hash_s hash) (hash_s snapshot);
+      Rpc.Client.remove t ["a"; "b"; "c"]
+      >>= fun hash ->
+      Alcotest.(check (neg string))
+        "Check snapshot hash after modification" (hash_s hash)
+        (hash_s snapshot);
+      Lwt.return_unit
+  | None ->
+      Alcotest.fail "Expected commit"
+
 
 let test_revert t _switch () =
   match !commit with
   | Some commit ->
-    Rpc.Client.revert t commit >>= fun b ->
-    Alcotest.(check bool) "revert" b true;
-    Rpc.Client.get t ["a"; "b"; "c"] >|= fun res ->
-    Alcotest.(check string) "revert value" res "123"
-  | None -> Alcotest.fail "Revert commit hash is not defined"
+      Rpc.Client.revert t commit
+      >>= fun b ->
+      Alcotest.(check bool) "revert" b true;
+      Rpc.Client.get t ["a"; "b"; "c"]
+      >|= fun res -> Alcotest.(check string) "revert value" res "123"
+  | None ->
+      Alcotest.fail "Revert commit hash is not defined"
+
 
 let test_set_tree t _switch () =
   let tree = Store.Tree.empty in
-  Store.Tree.add tree ["foo"; "a"] "1" >>= fun tree ->
-  Store.Tree.add tree ["foo"; "b"] "2" >>= fun tree ->
-  Store.Tree.add tree ["foot"; "c"] "3"  >>= fun tree ->
-  Rpc.Client.set_tree t ~author:"Testing" ~message:"Hello" [] tree >>= fun hash ->
-  Rpc.Client.get_tree t ["foo"] >>= fun tree' ->
-  Store.Tree.get_tree tree ["foo"] >>= fun tree ->
-  Store.Tree.diff tree tree' >>= fun diff ->
+  Store.Tree.add tree ["foo"; "a"] "1"
+  >>= fun tree ->
+  Store.Tree.add tree ["foo"; "b"] "2"
+  >>= fun tree ->
+  Store.Tree.add tree ["foot"; "c"] "3"
+  >>= fun tree ->
+  Rpc.Client.set_tree t ~author:"Testing" ~message:"Hello" [] tree
+  >>= fun hash ->
+  Rpc.Client.get_tree t ["foo"]
+  >>= fun tree' ->
+  Store.Tree.get_tree tree ["foo"]
+  >>= fun tree ->
+  Store.Tree.diff tree tree'
+  >>= fun diff ->
   Alcotest.(check int) "tree diff" 0 (List.length diff);
-  Rpc.Client.commit_info t hash >|= function
-    | Some info ->
+  Rpc.Client.commit_info t hash
+  >|= function
+  | Some info ->
       Alcotest.(check string) "info author" "Testing" (Irmin.Info.author info);
       Alcotest.(check string) "info message" "Hello" (Irmin.Info.message info)
-    | None -> Alcotest.fail "Expected commit info"
+  | None ->
+      Alcotest.fail "Expected commit info"
 
-  (* TODO: look into why this fails when run with [opam install --build-test]
+
+(* TODO: look into why this fails when run with [opam install --build-test]
      but not [dune runtest] *)
 let test_pull t _switch () =
-  Rpc.Client.pull t "git://github.com/zshipko/irmin-rpc.git" >>= function
-    | Ok _hash ->
-      Lwt_unix.sleep 1. >>= fun () ->
-      Rpc.Client.get t ["README.md"] >|= fun readme ->
+  Rpc.Client.pull t "git://github.com/zshipko/irmin-rpc.git"
+  >>= function
+  | Ok _hash ->
+      Rpc.Client.get t ["README.md"]
+      >|= fun readme ->
       let f = open_in "../../../README.md" in
       let n = in_channel_length f in
       let readme' = really_input_string f n in
       close_in f;
       Alcotest.(check string) "readme" readme readme'
-    | Error (`Msg e) -> Alcotest.fail e
+  | Error (`Msg e) ->
+      Alcotest.fail e
 
-let local t = [
-  Alcotest_lwt.test_case "snapshot (no head)" `Quick @@ test_snapshot_no_head t;
-  Alcotest_lwt.test_case "set" `Quick @@ test_set t;
-  Alcotest_lwt.test_case "get" `Quick @@ test_find_not_found t;
-  Alcotest_lwt.test_case "del" `Quick @@ test_remove t;
-  Alcotest_lwt.test_case "revert" `Quick @@ test_revert t;
-  Alcotest_lwt.test_case "get_tree/set_tree" `Quick @@ test_set_tree t;
-  Alcotest_lwt.test_case "pull" `Quick @@ test_pull t;
-]
+
+let test_merge t _switch () =
+  Rpc.Client.set t ~branch:"testing" ["abc"] "merged!"
+  >>= fun _ ->
+  Rpc.Client.merge t "testing"
+  >>= function
+  | Ok _hash ->
+      Rpc.Client.get t ["abc"]
+      >|= fun readme ->
+      Alcotest.(check string) "readme - merge" readme "merged!"
+  | Error conflict ->
+      Alcotest.failf "Conflict: %s\n"
+        (Fmt.to_to_string (Irmin.Type.pp_json Irmin.Merge.conflict_t) conflict)
+
+
+let local t =
+  [ Alcotest_lwt.test_case "snapshot (no head)" `Quick
+    @@ test_snapshot_no_head t
+  ; Alcotest_lwt.test_case "set" `Quick @@ test_set t
+  ; Alcotest_lwt.test_case "get" `Quick @@ test_find_not_found t
+  ; Alcotest_lwt.test_case "del" `Quick @@ test_remove t
+  ; Alcotest_lwt.test_case "revert" `Quick @@ test_revert t
+  ; Alcotest_lwt.test_case "get_tree/set_tree" `Quick @@ test_set_tree t
+  ; Alcotest_lwt.test_case "pull" `Quick @@ test_pull t
+  ; Alcotest_lwt.test_case "merge" `Quick @@ test_merge t ]
+
 
 let main =
-  Store.Repo.v cfg >|= fun repo ->
-  Alcotest.run "RPC" [
-    "Local", local (Rpc.Rpc.local repo);
-  ]
+  Store.Repo.v cfg
+  >|= fun repo -> Alcotest.run "RPC" [("Local", local (Rpc.Rpc.local repo))]
+
 
 let () = Lwt_main.run main
-
 
 (*---------------------------------------------------------------------------
    Copyright (c) 2018 Zach Shipko
