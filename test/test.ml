@@ -121,17 +121,18 @@ let test_pull t _switch () =
 
 
 let test_merge t _switch () =
-  Rpc.Client.set t ~branch:"testing" ["abc"] "merged!"
+  Rpc.Client.merge t ~branch:"testing" "master"
+  >>= fun _ ->
+  Rpc.Client.set t ~branch:"testing" ["README.md"] "merged!"
   >>= fun _ ->
   Rpc.Client.merge t "testing"
   >>= function
   | Ok _hash ->
-      Rpc.Client.get t ["abc"]
+      Rpc.Client.get t ["README.md"]
       >|= fun readme ->
       Alcotest.(check string) "readme - merge" readme "merged!"
-  | Error conflict ->
-      Alcotest.failf "Conflict: %s\n"
-        (Fmt.to_to_string (Irmin.Type.pp_json Irmin.Merge.conflict_t) conflict)
+  | Error (`Msg msg) ->
+      Alcotest.fail msg
 
 
 let local t =

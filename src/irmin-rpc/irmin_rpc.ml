@@ -382,21 +382,32 @@ struct
              Params.branch_get req |> Store.Branch.of_string |> unwrap
            in
            let message =
-             if Params.has_message req then Params.message_get req else "pull"
+             if Params.has_message req then Some (Params.message_get req)
+             else None
            in
            let author =
-             if Params.has_author req then Params.author_get req
-             else "irmin-rpc"
+             if Params.has_author req then Some (Params.author_get req)
+             else None
            in
            release_params ();
-           let info = Info.info ~author "%s" message in
+           let info =
+             match (message, author) with
+             | None, None ->
+                 `Set
+             | Some message, None ->
+                 `Merge (Info.info "%s" message)
+             | None, Some author ->
+                 `Merge (Info.info ~author "merge")
+             | Some message, Some author ->
+                 `Merge (Info.info ~author "%s" message)
+           in
            Service.return_lwt (fun () ->
                let resp, results =
                  Service.Response.create Results.init_pointer
                in
                Store.of_branch ctx branch
                >>= fun t ->
-               Sync.pull t remote (`Merge info)
+               Sync.pull t remote info
                >>= function
                | Ok () -> (
                    Store.Head.find t
