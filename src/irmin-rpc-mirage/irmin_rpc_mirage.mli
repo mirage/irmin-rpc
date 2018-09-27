@@ -22,8 +22,7 @@ module Make
     val run: t -> 'a Lwt.t
   end
 
-  module Client(C: sig val clock: Clock.t end): sig
-    module Rpc: Irmin_rpc.S with module Store = Store
+  module Client: sig
     type t = Irmin_rpc.t
     val connect: Stack.t -> Uri.t -> t Lwt.t
 

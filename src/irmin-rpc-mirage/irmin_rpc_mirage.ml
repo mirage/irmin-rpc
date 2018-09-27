@@ -10,16 +10,29 @@ module Make
   module Capnp_rpc_mirage = Capnp_rpc_mirage.Make(Stack)(Dns)
 
   module Server(C: sig val clock: Clock.t end) = struct
+    (*module T = struct
+      include Store
 
-    module Rpc = Irmin_rpc.Make(Store)(struct
-      let info ?(author = "irmin-rpc") =
+
+
+    end*)
+
+    module Info = struct
+        let info ?(author = "irmin-rpc") =
         let module Info =
           Irmin_mirage.Info(struct
             let name = author
           end)(Clock)
         in
         Info.f C.clock
-    end)
+    end
+
+    module Remote = struct
+      type Irmin.remote += R of Git_mirage.endpoint
+      let remote ?headers s = R (Git_mirage.endpoint ?headers (Uri.of_string s))
+    end
+
+    module Rpc = Irmin_rpc.Make(Store)(Info)(Remote)
 
     type t = {
       uri: Uri.t
@@ -40,20 +53,10 @@ module Make
     let run _t = fst @@ Lwt.wait ()
   end
 
-  module Client(C: sig val clock: Clock.t end) = struct
+  module Client = struct
     type t = Irmin_rpc.t
 
-    module Rpc = Irmin_rpc.Make(Store)(struct
-      let info ?(author = "irmin-rpc") =
-        let module Info =
-          Irmin_mirage.Info(struct
-            let name = author
-          end)(Clock)
-        in
-        Info.f C.clock
-    end)
-
-    include Rpc.Client
+    include Irmin_rpc.Client(Store)
 
     let connect stack uri =
       let dns = Dns.create stack in

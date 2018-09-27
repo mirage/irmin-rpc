@@ -5,9 +5,7 @@ let config path =
   let head = Git.Reference.of_string "refs/heads/master" in
   Irmin_git.config ~head path
 
-let run host port root contents store secret_key address_file =
-  let c = Irmin_unix.Cli.mk_contents contents in
-  let (module Store) = Irmin_unix.Cli.mk_store store c in
+let run host port (Irmin_unix.Resolver.S ((module Store), store, _)) secret_key address_file =
   let module Rpc = Irmin_rpc_unix.Make(Store) in
   let secret_key =
     match secret_key with
@@ -15,8 +13,8 @@ let run host port root contents store secret_key address_file =
     | None -> `Ephemeral
   in
   let p =
-    Store.Repo.v (config root) >>= fun repo ->
-    Rpc.Server.create ~secret_key (`TCP (host, port)) repo >>= fun server ->
+    store >>= fun store ->
+    Rpc.Server.create ~secret_key (`TCP (host, port)) (Store.repo store) >>= fun server ->
     let () = match address_file with
       | Some f ->
           let f = open_out f in
@@ -56,6 +54,6 @@ let address_file =
   let doc = "Write address to file" in
   Arg.(value & opt (some string) None & info ["f"; "address-file"] ~docv:"FILENAME" ~doc)
 
-let main_t = Term.(const run $ host $ port $ root $ contents $ store $ secret_key $ address_file)
+let main_t = Term.(const run $ host $ port $ Irmin_unix.Resolver.store $ secret_key $ address_file)
 let () = Term.exit @@ Term.eval (main_t, Term.info "irmin-rpc")
 

@@ -1,10 +1,16 @@
 open Lwt.Infix
 
 module Make(Store: Irmin.S) = struct
-
-  module Rpc = Irmin_rpc.Make(Store)(struct
+  module Info = struct
     let info = Irmin_unix.info
-  end)
+  end
+
+  module Remote = struct
+    type Irmin.remote += R of Git_unix.endpoint
+    let remote ?headers s = R (Git_unix.endpoint ?headers (Uri.of_string s))
+  end
+
+  module Rpc = Irmin_rpc.Make(Store)(Info)(Remote)
 
   module Server = struct
     type t = {
@@ -26,7 +32,7 @@ module Make(Store: Irmin.S) = struct
   module Client = struct
     type t = Irmin_rpc.t
 
-    include Rpc.Client
+    include Irmin_rpc.Client(Store)
 
     let connect uri =
       let client_vat = Capnp_rpc_unix.client_only_vat () in

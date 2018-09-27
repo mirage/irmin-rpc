@@ -1,5 +1,6 @@
 module Make(Store: Irmin.S): sig
   module Rpc: Irmin_rpc.S with module Store = Store
+
   module Server: sig
     type t
 

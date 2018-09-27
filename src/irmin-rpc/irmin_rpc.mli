@@ -81,18 +81,18 @@ module type CLIENT = sig
     t -> Store.Commit.Hash.t -> Store.Commit.Hash.t list Lwt.t
 end
 
-module type S = sig
-  module Store : Irmin.S
-
-  val local : Store.repo -> t
-
-  module Client : CLIENT with module Store = Store
+module type REMOTE = sig
+  val remote: ?headers:Cohttp.Header.t -> string -> Irmin.remote
 end
 
-module Make
-    (Store : Irmin.S) (Info : sig
-        val info :
-             ?author:string
-          -> ('a, Format.formatter, unit, Irmin.Info.f) format4
-          -> 'a
-    end) : S with module Store = Store
+module type INFO = sig
+  val info: ?author:string -> ('a, Format.formatter, unit, Irmin.Info.f) format4 -> 'a
+end
+
+module type S = sig
+  module Store : Irmin.S
+  val local : Store.repo -> t
+end
+
+module Make (Store : Irmin.S)(Info: INFO)(Remote: REMOTE): S with module Store = Store
+module Client(Store : Irmin.S): CLIENT with module Store = Store
