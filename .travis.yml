@@ -7,7 +7,7 @@ before_install:
 env:
   global:
     - ALCOTEST_SHOW_ERRORS=1
-    - PINS="irmin.dev:--dev irmin-mem.dev:--dev irmin-fs.dev:--dev irmin-http.dev:--dev irmin-git.dev:--dev irmin-mirage.dev:--dev irmin-unix.dev:--dev  git.dev:--dev git-unix.dev:--dev git-mirage.dev:--dev git-http.dev:--dev digestif.dev:--dev irmin-rpc.dev:. irmin-rpc-unix.dev:. irmin-rpc-mirage.dev:."
+    - PINS="irmin.dev:--dev irmin-mem.dev:--dev irmin-fs.dev:--dev irmin-http.dev:--dev irmin-git.dev:--dev irmin-mirage.dev:--dev irmin-unix.dev:--dev  git.dev:--dev git-unix.dev:--dev git-mirage.dev:--dev git-http.dev:--dev digestif.dev:--dev decompress.dev:--dev irmin-rpc.dev:. irmin-rpc-unix.dev:. irmin-rpc-mirage.dev:."
   matrix:
     - OCAML_VERSION=4.06 PACKAGE="irmin-rpc-unix.dev" TESTS=false
     - OCAML_VERSION=4.07 PACKAGE="irmin-rpc-unix.dev" TESTS=false
