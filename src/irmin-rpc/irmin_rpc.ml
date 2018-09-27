@@ -177,10 +177,9 @@ module Conv(Store: Irmin.S) = struct
 end
 
 
-module Make (Store : Irmin.S)(Info: INFO)(Remote: REMOTE) = struct
+module Make (Store: Irmin.S)(Info: INFO)(Remote: REMOTE) = struct
   module Store = Store
-  module Sync = Irmin.Sync (Store)
-
+  module Sync = Irmin.Sync(Store)
   include Conv(Store)
 
   let local ctx =

@@ -10,13 +10,6 @@ module Make
   module Capnp_rpc_mirage = Capnp_rpc_mirage.Make(Stack)(Dns)
 
   module Server(C: sig val clock: Clock.t end) = struct
-    (*module T = struct
-      include Store
-
-
-
-    end*)
-
     module Info = struct
         let info ?(author = "irmin-rpc") =
         let module Info =
@@ -28,8 +21,8 @@ module Make
     end
 
     module Remote = struct
-      type Irmin.remote += R of Git_mirage.endpoint
-      let remote ?headers s = R (Git_mirage.endpoint ?headers (Uri.of_string s))
+      type Irmin.remote += E of Git_mirage.endpoint
+      let remote ?headers s = E (Git_mirage.endpoint ?headers (Uri.of_string s))
     end
 
     module Rpc = Irmin_rpc.Make(Store)(Info)(Remote)

@@ -5,8 +5,10 @@ let config path =
   let head = Git.Reference.of_string "refs/heads/master" in
   Irmin_git.config ~head path
 
-let run host port (Irmin_unix.Resolver.S ((module Store), store, _)) secret_key address_file =
-  let module Rpc = Irmin_rpc_unix.Make(Store) in
+let run host port (Irmin_unix.Resolver.S ((module Store), store, remote_fn)) secret_key address_file =
+  let module Rpc = Irmin_rpc_unix.Make(Store)(struct
+    let remote = match remote_fn with Some f -> f | None -> failwith "Invalid remote function"
+  end) in
   let secret_key =
     match secret_key with
     | Some key -> `File key

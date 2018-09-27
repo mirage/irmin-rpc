@@ -1,4 +1,4 @@
-module Make(Store: Irmin.S): sig
+module Make(Store: Irmin.S)(Remote: Irmin_rpc.REMOTE): sig
   module Rpc: Irmin_rpc.S with module Store = Store
 
   module Server: sig

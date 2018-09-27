@@ -1,13 +1,8 @@
 open Lwt.Infix
 
-module Make(Store: Irmin.S) = struct
+module Make(Store: Irmin.S)(Remote: Irmin_rpc.REMOTE) = struct
   module Info = struct
     let info = Irmin_unix.info
-  end
-
-  module Remote = struct
-    type Irmin.remote += R of Git_unix.endpoint
-    let remote ?headers s = R (Git_unix.endpoint ?headers (Uri.of_string s))
   end
 
   module Rpc = Irmin_rpc.Make(Store)(Info)(Remote)

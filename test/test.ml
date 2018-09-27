@@ -6,7 +6,9 @@
 
 open Lwt.Infix
 module Store = Irmin_unix.Git.Mem.KV (Irmin.Contents.String)
-module Rpc = Irmin_rpc_unix.Make (Store)
+module Rpc = Irmin_rpc_unix.Make (Store) (struct
+  let remote = Store.remote
+end)
 
 let _ = Logs.set_reporter (Logs.format_reporter ())
 
@@ -14,7 +16,7 @@ let _ = Unix.system "rm -rf db"
 
 let cfg = Irmin_git.config "db"
 
-let hash_s = Fmt.to_to_string Store.Commit.Hash.pp
+let hash_s = Irmin.Type.to_string Store.Commit.Hash.t
 
 let commit = ref None
 
@@ -106,8 +108,7 @@ let test_set_tree t _switch () =
 (* TODO: look into why this fails when run with [opam install --build-test]
      but not [dune runtest] *)
 let test_pull t _switch () =
-  Rpc.Client.pull t "git://github.com/zshipko/irmin-rpc.git"
-  >>= function
+  Rpc.Client.pull t "git://github.com/zshipko/irmin-rpc.git" >>= function
   | Ok _hash ->
       Rpc.Client.get t ["README.md"]
       >|= fun readme ->
