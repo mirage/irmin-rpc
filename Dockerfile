@@ -35,6 +35,8 @@ RUN opam config exec -- opam pin add git-http.dev --dev
 RUN opam config exec -- opam pin add git-unix.dev --dev
 RUN opam config exec -- opam pin add irmin.dev --dev
 RUN opam config exec -- opam pin add irmin-http.dev --dev
+RUN opam config exec -- opam pin add irmin-mem.dev --dev
+RUN opam config exec -- opam pin add irmin-fs.dev --dev
 RUN opam config exec -- opam pin add irmin-git.dev --dev
 RUN opam config exec -- opam pin add irmin-unix.dev --dev
 COPY . .
