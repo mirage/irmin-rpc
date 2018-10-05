@@ -52,4 +52,5 @@ interface Irmin {
   branches @12 () -> (result :List(Text));
   commitHistory @13 (hash :Data) -> (result :List(Data));
   removeBranch @14 (branch :Text);
+  createBranch @15 (branch :Text, hash :Data);
 }
