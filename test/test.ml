@@ -12,7 +12,7 @@ end)
 
 let _ = Logs.set_reporter (Logs.format_reporter ())
 
-let _ = Unix.system "rm -rf db"
+let _ = Unix.system "rm -rf ./db"
 
 let cfg = Irmin_git.config "db"
 
@@ -100,7 +100,7 @@ let test_set_tree t _switch () =
   >|= function
   | Some info ->
       Alcotest.(check string) "info author" "Testing" (Irmin.Info.author info);
-      Alcotest.(check string) "info message" "Hello" (Irmin.Info.message info)
+      Alcotest.(check string) "info message" "\nHello" (Irmin.Info.message info)
   | None ->
       Alcotest.fail "Expected commit info"
 

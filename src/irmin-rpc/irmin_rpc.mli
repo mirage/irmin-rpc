@@ -79,6 +79,8 @@ module type CLIENT = sig
 
   val commit_history :
     t -> Store.Commit.Hash.t -> Store.Commit.Hash.t list Lwt.t
+
+  val remove_branch : t -> Store.branch -> unit Lwt.t
 end
 
 module type REMOTE = sig

@@ -81,6 +81,8 @@ module type CLIENT = sig
 
   val commit_history :
     t -> Store.Commit.Hash.t -> Store.Commit.Hash.t list Lwt.t
+
+  val remove_branch : t -> Store.branch -> unit Lwt.t
 end
 
 module type REMOTE = sig
@@ -537,18 +539,19 @@ module Make (Store: Irmin.S)(Info: INFO)(Remote: REMOTE) = struct
            let open Ir.Branches in
            release_params ();
            Service.return_lwt (fun () ->
-               let resp, results =
-                 Service.Response.create Results.init_pointer
-               in
-               Store.Branch.list ctx
-               >>= fun branches ->
-               let l =
-                 List.map
-                   (fun x -> Irmin.Type.to_string Store.branch_t x)
-                   branches
-               in
-               let _ = Results.result_set_list results l in
-               Lwt.return_ok resp )
+             let resp, results =
+               Service.Response.create Results.init_pointer
+             in
+             Store.Branch.list ctx
+             >>= fun branches ->
+             let l =
+               List.map
+                 (fun x -> Irmin.Type.to_string Store.branch_t x)
+                 branches
+             in
+             let _ = Results.result_set_list results l in
+             Lwt.return_ok resp
+          )
 
          method commit_history_impl req release_params =
            let open Ir.CommitHistory in
@@ -568,8 +571,19 @@ module Make (Store: Irmin.S)(Info: INFO)(Remote: REMOTE) = struct
               ignore (Results.result_set_list results l)
             | None ->
               ignore (Results.result_set_list results []);
-              Lwt.return_unit)
-           >>= fun () -> Lwt.return_ok resp )
+              Lwt.return_unit) >>= fun () ->
+            Lwt.return_ok resp
+          )
+
+        method remove_branch_impl req release_params =
+          let open Ir.RemoveBranch in
+          let branch = Params.branch_get req |> Irmin.Type.of_string Store.branch_t |> unwrap in
+          release_params ();
+          Service.return_lwt (fun () ->
+            Store.Branch.remove ctx branch >>= fun () ->
+            let resp, _results = Service.Response.create Results.init_pointer in
+            Lwt.return_ok resp
+          )
        end
 end
 
@@ -844,5 +858,11 @@ module Client(Store: Irmin.S) = struct
         | Error _ ->
             Lwt.return_none )
       l
+
+  let remove_branch t branch =
+    let open Ir.RemoveBranch in
+    let req, p = Capability.Request.create Params.init_pointer in
+    branch_param Params.branch_set p (Some branch);
+    Capability.call_for_unit_exn t method_id req
 end
 

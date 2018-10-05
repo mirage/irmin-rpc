@@ -29,6 +29,7 @@ COPY --from=capnp /usr/local/include/capnp /usr/local/include/capnp
 COPY irmin-rpc.opam irmin-rpc-unix.opam ./
 RUN opam config exec -- opam pin add digestif.dev --dev
 RUN opam config exec -- opam pin add checkseum.dev --dev
+RUN opam config exec -- opam pin add decompress.dev --dev
 RUN opam config exec -- opam pin add git.dev --dev
 RUN opam config exec -- opam pin add git-http.dev --dev
 RUN opam config exec -- opam pin add git-unix.dev --dev
