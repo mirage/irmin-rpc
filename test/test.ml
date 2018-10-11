@@ -135,6 +135,17 @@ let test_merge t _switch () =
   | Error (`Msg msg) ->
       Alcotest.fail msg
 
+let test_create_remove_branch t _switch () =
+  Rpc.Client.snapshot t >>= fun head ->
+  match head with
+  | Some head ->
+    Rpc.Client.create_branch t "aaa" head
+    >>= fun _ ->
+    Rpc.Client.branches t
+    >|= fun l ->
+    let l = List.mem "aaa" l in
+    Alcotest.(check bool) "branches contains 'aaa'" l true
+  | None -> Alcotest.fail "No head commit found"
 
 let local t =
   [ Alcotest_lwt.test_case "snapshot (no head)" `Quick
@@ -145,7 +156,9 @@ let local t =
   ; Alcotest_lwt.test_case "revert" `Quick @@ test_revert t
   ; Alcotest_lwt.test_case "get_tree/set_tree" `Quick @@ test_set_tree t
   ; Alcotest_lwt.test_case "pull" `Quick @@ test_pull t
-  ; Alcotest_lwt.test_case "merge" `Quick @@ test_merge t ]
+  ; Alcotest_lwt.test_case "merge" `Quick @@ test_merge t
+  ; Alcotest_lwt.test_case "create/remove branch" `Quick @@ test_create_remove_branch t
+  ]
 
 
 let main =
