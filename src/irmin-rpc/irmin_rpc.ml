@@ -236,7 +236,7 @@ module Make (Store: Irmin.S)(Info: INFO)(Remote: REMOTE) = struct
              Store.of_branch ctx branch >>= fun t ->
              match Irmin.Type.of_string Store.contents_t value with
              | Ok value -> (
-                 Store.set t key value ~info:(Info.info ~author "%s" message)
+                 Store.set_exn t key value ~info:(Info.info ~author "%s" message)
                  >>= fun () ->
                  Store.Head.find t
                  >>= function
@@ -273,7 +273,7 @@ module Make (Store: Irmin.S)(Info: INFO)(Remote: REMOTE) = struct
              in
              Store.of_branch ctx branch
              >>= fun t ->
-             Store.remove t key ~info:(Info.info ~author "%s" message)
+             Store.remove_exn t key ~info:(Info.info ~author "%s" message)
              >>= fun () ->
              Store.Head.get t
              >>= fun head ->
@@ -330,7 +330,7 @@ module Make (Store: Irmin.S)(Info: INFO)(Remote: REMOTE) = struct
              Store.of_branch ctx branch
              >>= fun t ->
              let tree = decode_tree tree |> Store.Tree.of_concrete in
-             Store.set_tree t key tree ~info:(Info.info ~author "%s" message)
+             Store.set_tree_exn t key tree ~info:(Info.info ~author "%s" message)
              >>= fun () ->
              Store.Head.get t
              >>= fun head ->
