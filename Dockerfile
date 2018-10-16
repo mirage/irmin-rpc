@@ -34,6 +34,7 @@ RUN opam config exec -- opam pin add git.dev --dev
 RUN opam config exec -- opam pin add git-http.dev --dev
 RUN opam config exec -- opam pin add git-unix.dev --dev
 RUN opam config exec -- opam pin add irmin.dev --dev
+RUN opam config exec -- opam pin add irmin-graphql.dev https://github.com/mirage/irmin.git
 RUN opam config exec -- opam pin add irmin-http.dev --dev
 RUN opam config exec -- opam pin add irmin-mem.dev --dev
 RUN opam config exec -- opam pin add irmin-fs.dev --dev

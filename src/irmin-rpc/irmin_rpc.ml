@@ -103,13 +103,10 @@ end
 exception Error_message of string
 
 let unwrap = function
-  | Ok x ->
-      x
-  | Error (`Msg m) ->
-      raise (Error_message m)
+  | Ok x -> x
+  | Error (`Msg m) -> raise (Error_message m)
 
 module Conv(Store: Irmin.S) = struct
-  (* Convert a Store.tree to capnproto Tree object *)
   let rec encode_tree tr key (tree : Store.tree) : unit Lwt.t =
     let module Tree = Api.Builder.Irmin.Tree in
     let module Node = Api.Builder.Irmin.Node in
@@ -156,7 +153,6 @@ module Conv(Store: Irmin.S) = struct
         `Contents (c, Store.Metadata.default)
     | Undefined _ ->
         `Tree []
-
 
   let encode_commit_info cm info =
     let module Info = Api.Builder.Irmin.Info in
