@@ -13,7 +13,7 @@ module Make(Store: Irmin.S)(Remote: Irmin_rpc.REMOTE): sig
       Capnp_rpc_unix.Network.Location.t ->
       Store.repo -> t Lwt.t
 
-    val run: t -> 'a Lwt.t
+    val run: t -> unit Lwt.t
   end
 
   module Client: sig

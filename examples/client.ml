@@ -1,10 +1,12 @@
 open Lwt.Infix
 
-module Store = Irmin_mem.KV(Irmin.Contents.String)
-module Rpc = Irmin_rpc_unix.Make(Store)
+module Store = Irmin_unix.Git.Mem.KV(Irmin.Contents.String)
+module Rpc = Irmin_rpc_unix.Make(Store)(struct
+  let remote = Store.remote
+end)
 
 (* This was printed when running the server example *)
-let uri = "capnp://sha-256:YIhQi5oAx0XAUJc7XnbhbNooKDds0LV9zbtsepd3X6A@127.0.0.1:9999/WUNVqiE4hrUdV6GvTvnKq6yg-8xVvJmILcLlwPUVldo"
+let uri = "capnp://sha-256:HUOdhEKv0Knk5USkfaFiXCC_l_s3dYjoayyrmu_olh4@127.0.0.1:9999/yxEIPPXH-w8pTd_ULcm4AmUsZwA5QrSfSZj_z_Vzulw"
 
 let main =
     Rpc.Client.connect (Uri.of_string uri) >>= fun client ->
