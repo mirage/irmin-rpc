@@ -1,4 +1,4 @@
-opam-version: "1.2"
+opam-version: "2.0"
 maintainer: "Zach Shipko <zachshipko@gmail.com>"
 authors: ["Zach Shipko <zachshipko@gmail.com>"]
 homepage: "https://github.com/zshipko/irmin-rpc"
@@ -6,12 +6,10 @@ doc: "https://zshipko.github.io/irmin-rpc/doc"
 license: "ISC"
 dev-repo: "https://github.com/zshipko/irmin-rpc.git"
 bug-reports: "https://github.com/zshipko/irmin-rpc/issues"
-tags: []
-
-available: [ ocaml-version >= "4.03.0"]
 
 depends:
 [
+    "ocaml" {>= "4.03.0"}
     "dune" {build}
     "irmin"
     "capnp-rpc-lwt"

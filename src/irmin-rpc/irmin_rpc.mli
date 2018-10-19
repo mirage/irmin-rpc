@@ -22,7 +22,7 @@ module type CLIENT = sig
     -> ?message:string
     -> Store.key
     -> Store.contents
-    -> Store.Commit.hash Lwt.t
+    -> Store.Hash.t Lwt.t
 
   val set_tree :
        t
@@ -31,7 +31,7 @@ module type CLIENT = sig
     -> ?message:string
     -> Store.key
     -> Store.tree
-    -> Store.Commit.hash Lwt.t
+    -> Store.Hash.t Lwt.t
 
   val remove :
        t
@@ -39,13 +39,13 @@ module type CLIENT = sig
     -> ?author:string
     -> ?message:string
     -> Store.key
-    -> Store.Commit.hash Lwt.t
+    -> Store.Hash.t Lwt.t
 
   val clone :
        t
     -> ?branch:Store.branch
     -> string
-    -> (Store.Commit.hash, [`Msg of string]) result Lwt.t
+    -> (Store.Hash.t, [`Msg of string]) result Lwt.t
 
   val pull :
        t
@@ -53,7 +53,7 @@ module type CLIENT = sig
     -> ?author:string
     -> ?message:string
     -> string
-    -> (Store.Commit.hash, [`Msg of string]) result Lwt.t
+    -> (Store.Hash.t, [`Msg of string]) result Lwt.t
 
   val push :
        t
@@ -67,21 +67,21 @@ module type CLIENT = sig
     -> ?author:string
     -> ?message:string
     -> Store.branch
-    -> (Store.Commit.hash, [`Msg of string]) result Lwt.t
+    -> (Store.Hash.t, [`Msg of string]) result Lwt.t
 
-  val commit_info : t -> Store.Commit.Hash.t -> Irmin.Info.t option Lwt.t
+  val commit_info : t -> Store.Hash.t -> Irmin.Info.t option Lwt.t
 
-  val snapshot : ?branch:Store.branch -> t -> Store.Commit.Hash.t option Lwt.t
+  val snapshot : ?branch:Store.branch -> t -> Store.Hash.t option Lwt.t
 
-  val revert : t -> ?branch:Store.branch -> Store.Commit.Hash.t -> bool Lwt.t
+  val revert : t -> ?branch:Store.branch -> Store.Hash.t -> bool Lwt.t
 
   val branches : t -> Store.branch list Lwt.t
 
   val commit_history :
-    t -> Store.Commit.Hash.t -> Store.Commit.Hash.t list Lwt.t
+    t -> Store.Hash.t -> Store.Hash.t list Lwt.t
 
   val remove_branch : t -> Store.branch -> unit Lwt.t
-  val create_branch : t -> Store.branch -> Store.Commit.hash -> unit Lwt.t
+  val create_branch : t -> Store.branch -> Store.Hash.t -> unit Lwt.t
 end
 
 module type REMOTE = sig

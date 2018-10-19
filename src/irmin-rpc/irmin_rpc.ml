@@ -24,7 +24,7 @@ module type CLIENT = sig
     -> ?message:string
     -> Store.key
     -> Store.contents
-    -> Store.Commit.hash Lwt.t
+    -> Store.Hash.t Lwt.t
 
   val set_tree :
        t
@@ -33,7 +33,7 @@ module type CLIENT = sig
     -> ?message:string
     -> Store.key
     -> Store.tree
-    -> Store.Commit.hash Lwt.t
+    -> Store.Hash.t Lwt.t
 
   val remove :
        t
@@ -41,13 +41,13 @@ module type CLIENT = sig
     -> ?author:string
     -> ?message:string
     -> Store.key
-    -> Store.Commit.hash Lwt.t
+    -> Store.Hash.t Lwt.t
 
   val clone :
        t
     -> ?branch:Store.branch
     -> string
-    -> (Store.Commit.hash, [`Msg of string]) result Lwt.t
+    -> (Store.Hash.t, [`Msg of string]) result Lwt.t
 
   val pull :
        t
@@ -55,7 +55,7 @@ module type CLIENT = sig
     -> ?author:string
     -> ?message:string
     -> string
-    -> (Store.Commit.hash, [`Msg of string]) result Lwt.t
+    -> (Store.Hash.t, [`Msg of string]) result Lwt.t
 
   val push :
        t
@@ -69,21 +69,21 @@ module type CLIENT = sig
     -> ?author:string
     -> ?message:string
     -> Store.branch
-    -> (Store.Commit.hash, [`Msg of string]) result Lwt.t
+    -> (Store.Hash.t, [`Msg of string]) result Lwt.t
 
-  val commit_info : t -> Store.Commit.Hash.t -> Irmin.Info.t option Lwt.t
+  val commit_info : t -> Store.Hash.t -> Irmin.Info.t option Lwt.t
 
-  val snapshot : ?branch:Store.branch -> t -> Store.Commit.Hash.t option Lwt.t
+  val snapshot : ?branch:Store.branch -> t -> Store.Hash.t option Lwt.t
 
-  val revert : t -> ?branch:Store.branch -> Store.Commit.Hash.t -> bool Lwt.t
+  val revert : t -> ?branch:Store.branch -> Store.Hash.t -> bool Lwt.t
 
   val branches : t -> Store.branch list Lwt.t
 
   val commit_history :
-    t -> Store.Commit.Hash.t -> Store.Commit.Hash.t list Lwt.t
+    t -> Store.Hash.t -> Store.Hash.t list Lwt.t
 
   val remove_branch : t -> Store.branch -> unit Lwt.t
-  val create_branch : t -> Store.branch -> Store.Commit.hash -> unit Lwt.t
+  val create_branch : t -> Store.branch -> Store.Hash.t -> unit Lwt.t
 end
 
 module type REMOTE = sig
@@ -166,7 +166,7 @@ module Conv(Store: Irmin.S) = struct
     let module Commit = Api.Builder.Irmin.Commit in
     let module Info = Api.Builder.Irmin.Info in
     let info = Commit.info_init commit in
-    let hash = Irmin.Type.to_string Store.Commit.Hash.t (Store.Commit.hash cm) in
+    let hash = Irmin.Type.to_string Store.Hash.t (Store.Commit.hash cm) in
     Commit.hash_set commit hash;
     let tr = Commit.tree_init commit in
     Store.Commit.tree cm
@@ -488,7 +488,7 @@ module Make (Store: Irmin.S)(Info: INFO)(Remote: REMOTE) = struct
              let resp, results =
                Service.Response.create Results.init_pointer
              in
-             let hash = Irmin.Type.of_string Store.Commit.Hash.t hash |> unwrap in
+             let hash = Irmin.Type.of_string Store.Hash.t hash |> unwrap in
              Store.Commit.of_hash ctx hash
              >>= function
              | Some c ->
@@ -513,7 +513,7 @@ module Make (Store: Irmin.S)(Info: INFO)(Remote: REMOTE) = struct
              in
              Store.Head.find t >>= function
              | Some commit ->
-                 let s = Irmin.Type.to_string Store.Commit.Hash.t in
+                 let s = Irmin.Type.to_string Store.Hash.t in
                  Results.result_set results (Store.Commit.hash commit |> s);
                  Lwt.return_ok resp
              | None ->
@@ -527,7 +527,7 @@ module Make (Store: Irmin.S)(Info: INFO)(Remote: REMOTE) = struct
              Params.branch_get req |> Irmin.Type.of_string Store.branch_t |> unwrap
            in
            let commit =
-             Params.hash_get req |> Irmin.Type.of_string Store.Commit.Hash.t |> unwrap
+             Params.hash_get req |> Irmin.Type.of_string Store.Hash.t |> unwrap
            in
            release_params ();
            Service.return_lwt (fun () ->
@@ -568,7 +568,7 @@ module Make (Store: Irmin.S)(Info: INFO)(Remote: REMOTE) = struct
          method commit_history_impl req release_params =
            let open Ir.CommitHistory in
            let commit =
-             Params.hash_get req |> Irmin.Type.of_string Store.Commit.Hash.t |> unwrap
+             Params.hash_get req |> Irmin.Type.of_string Store.Hash.t |> unwrap
            in
            release_params ();
            Service.return_lwt (fun () ->
@@ -578,7 +578,7 @@ module Make (Store: Irmin.S)(Info: INFO)(Remote: REMOTE) = struct
             Store.Commit.of_hash ctx commit >>= (function
             | Some commit ->
               Store.Commit.parents commit >>= Lwt_list.map_p (fun commit ->
-              Irmin.Type.to_string Store.Commit.Hash.t (Store.Commit.hash commit)
+              Irmin.Type.to_string Store.Hash.t (Store.Commit.hash commit)
               |> Lwt.return ) >|= fun l ->
               ignore (Results.result_set_list results l)
             | None ->
@@ -601,7 +601,7 @@ module Make (Store: Irmin.S)(Info: INFO)(Remote: REMOTE) = struct
           let open Ir.CreateBranch in
           let branch = Params.branch_get req |> Irmin.Type.of_string Store.branch_t |> unwrap in
            let commit =
-             Params.hash_get req |> Irmin.Type.of_string Store.Commit.Hash.t |> unwrap
+             Params.hash_get req |> Irmin.Type.of_string Store.Hash.t |> unwrap
            in
           release_params ();
            Service.return_lwt (fun () ->
@@ -708,7 +708,7 @@ module Client(Store: Irmin.S) = struct
     if Results.has_result res then
       let commit = Results.result_get res in
       Api.Reader.Irmin.Commit.hash_get commit
-      |> Irmin.Type.of_string Store.Commit.Hash.t
+      |> Irmin.Type.of_string Store.Hash.t
       |> unwrap
     else raise (Error_message "Unable to set key")
 
@@ -728,7 +728,7 @@ module Client(Store: Irmin.S) = struct
     >|= fun res ->
     let commit = Results.result_get res in
     Api.Reader.Irmin.Commit.hash_get commit
-    |> Irmin.Type.of_string Store.Commit.Hash.t
+    |> Irmin.Type.of_string Store.Hash.t
     |> unwrap
 
 
@@ -744,7 +744,7 @@ module Client(Store: Irmin.S) = struct
     >|= fun res ->
     let commit = Results.result_get res in
     Api.Reader.Irmin.Commit.hash_get commit
-    |> Irmin.Type.of_string Store.Commit.Hash.t
+    |> Irmin.Type.of_string Store.Hash.t
     |> unwrap
 
 
@@ -759,7 +759,7 @@ module Client(Store: Irmin.S) = struct
         let commit = Results.result_get res in
         Ok
           ( Api.Reader.Irmin.Commit.hash_get commit
-          |> Irmin.Type.of_string Store.Commit.Hash.t
+          |> Irmin.Type.of_string Store.Hash.t
           |> unwrap )
     | Error err ->
         let s = Fmt.to_to_string Capnp_rpc.Error.pp err in
@@ -779,7 +779,7 @@ module Client(Store: Irmin.S) = struct
         let commit = Results.result_get res in
         Ok
           ( Api.Reader.Irmin.Commit.hash_get commit
-          |> Irmin.Type.of_string Store.Commit.Hash.t
+          |> Irmin.Type.of_string Store.Hash.t
           |> unwrap )
     | Error err ->
         let s = Fmt.to_to_string Capnp_rpc.Error.pp err in
@@ -815,7 +815,7 @@ module Client(Store: Irmin.S) = struct
         let commit = Results.result_get res in
         Ok
           ( Api.Reader.Irmin.Commit.hash_get commit
-          |> Irmin.Type.of_string Store.Commit.Hash.t
+          |> Irmin.Type.of_string Store.Hash.t
           |> unwrap )
     | Error err ->
         let err = Fmt.to_to_string Capnp_rpc.Error.pp err in
@@ -825,7 +825,7 @@ module Client(Store: Irmin.S) = struct
   let commit_info t hash =
     let open Ir.CommitInfo in
     let req, p = Capability.Request.create Params.init_pointer in
-    Params.hash_set p (Irmin.Type.to_string Store.Commit.Hash.t hash);
+    Params.hash_set p (Irmin.Type.to_string Store.Hash.t hash);
     Capability.call_for_value_exn t method_id req
     >|= fun res ->
     if Results.has_result res then
@@ -846,7 +846,7 @@ module Client(Store: Irmin.S) = struct
     >|= fun res ->
     if Results.has_result res then
       let commit = Results.result_get res in
-      Some (Irmin.Type.of_string Store.Commit.Hash.t commit |> unwrap)
+      Some (Irmin.Type.of_string Store.Hash.t commit |> unwrap)
     else None
 
 
@@ -854,7 +854,7 @@ module Client(Store: Irmin.S) = struct
     let open Ir.Revert in
     let req, p = Capability.Request.create Params.init_pointer in
     branch_param Params.branch_set p branch;
-    Params.hash_set p (Irmin.Type.to_string Store.Commit.Hash.t hash);
+    Params.hash_set p (Irmin.Type.to_string Store.Hash.t hash);
     Capability.call_for_value_exn t method_id req
     >|= fun res -> Results.result_get res
 
@@ -878,13 +878,13 @@ module Client(Store: Irmin.S) = struct
   let commit_history t hash =
     let open Ir.CommitHistory in
     let req, p = Capability.Request.create Params.init_pointer in
-    Params.hash_set p (Irmin.Type.to_string Store.Commit.Hash.t hash);
+    Params.hash_set p (Irmin.Type.to_string Store.Hash.t hash);
     Capability.call_for_value_exn t method_id req
     >>= fun res ->
     let l = Results.result_get_list res in
     Lwt_list.filter_map_s
       (fun x ->
-        match Irmin.Type.of_string Store.Commit.Hash.t x with
+        match Irmin.Type.of_string Store.Hash.t x with
         | Ok b ->
             Lwt.return_some b
         | Error _ ->
@@ -901,7 +901,7 @@ module Client(Store: Irmin.S) = struct
     let open Ir.CreateBranch in
     let req, p = Capability.Request.create Params.init_pointer in
     branch_param Params.branch_set p (Some name);
-    Params.hash_set p (Irmin.Type.to_string Store.Commit.Hash.t hash);
+    Params.hash_set p (Irmin.Type.to_string Store.Hash.t hash);
     Capability.call_for_unit_exn t method_id req
 end
 
