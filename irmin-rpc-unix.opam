@@ -4,7 +4,7 @@ authors: ["Zach Shipko <zachshipko@gmail.com>"]
 homepage: "https://github.com/zshipko/irmin-rpc"
 doc: "https://zshipko.github.io/irmin-rpc/doc"
 license: "ISC"
-dev-repo: "https://github.com/zshipko/irmin-rpc.git"
+dev-repo: "git://github.com:zshipko/irmin-rpc"
 bug-reports: "https://github.com/zshipko/irmin-rpc/issues"
 tags: []
 
