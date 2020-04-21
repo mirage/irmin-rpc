@@ -149,7 +149,7 @@ let local t =
 
 let main =
   Store.Repo.v cfg
-  >|= fun repo -> Alcotest.run "RPC" [("Local", local (Rpc.Rpc.local repo))]
+  >>= fun repo -> Alcotest_lwt.run "RPC" [("Local", local (Rpc.Rpc.local repo))]
 
 let () = Lwt_main.run main
 

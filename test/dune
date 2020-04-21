@@ -1,10 +1,4 @@
-(executables
-    (libraries digestif.c irmin-rpc-unix alcotest-lwt)
-    (names test)
-    (modules test))
-
-(alias
-    (name runtest)
-    (package irmin-rpc-unix)
-    (deps test.exe)
-    (action (run %{dep:test.exe})))
+(test
+ (name test)
+ (libraries alcotest alcotest-lwt digestif.c cohttp irmin irmin-git
+   irmin-rpc-unix irmin-unix logs lwt lwt.unix))
