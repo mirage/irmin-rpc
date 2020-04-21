@@ -13,9 +13,9 @@ struct
 
   module Server = struct
     module Info = struct
-      let info ?(author = "irmin-rpc") =
-        let module Info = Irmin_mirage.Info (Pclock) in
-        Info.f ~author
+      module Info = Irmin_mirage.Info (Pclock)
+
+      let info ?(author = "irmin-rpc") = Info.f ~author
     end
 
     module Remote = struct
