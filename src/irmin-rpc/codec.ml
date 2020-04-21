@@ -10,12 +10,10 @@ module Make (Store : Irmin.S) = struct
     let module Tree = Raw.Builder.Irmin.Tree in
     let module Node = Raw.Builder.Irmin.Node in
     let ks = Irmin.Type.to_string Store.key_t key in
-    ignore @@ Tree.key_set tr ks;
+    Tree.key_set tr ks;
     Store.Tree.to_concrete tree >>= function
     | `Contents (contents, _) ->
-        let _ =
-          Tree.contents_set tr (Irmin.Type.to_string Store.contents_t contents)
-        in
+        Tree.contents_set tr (Irmin.Type.to_string Store.contents_t contents);
         Lwt.return_unit
     | `Tree l ->
         Lwt_list.map_p
@@ -28,7 +26,13 @@ module Make (Store : Irmin.S) = struct
             encode_tree tt (Store.Key.rcons key step) tree >|= fun () -> node)
           l
         >>= fun l ->
-        let _ = Tree.node_set_list tr l in
+        let (_
+              : ( Irmin_rpc__Irmin_api.rw,
+                  Irmin_rpc__Raw.Builder.Irmin.Node.t,
+                  Raw.Reader.builder_array_t )
+                Capnp.Array.t) =
+          Tree.node_set_list tr l
+        in
         Lwt.return_unit
 
   let rec decode_tree tree : Store.Tree.concrete =
