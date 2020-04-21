@@ -177,8 +177,7 @@ module Conv (Store : Irmin.S) = struct
     let hash = Irmin.Type.to_string Store.Hash.t (Store.Commit.hash cm) in
     Commit.hash_set commit hash;
     let tr = Commit.tree_init commit in
-    Store.Commit.tree cm
-    >>= fun tree ->
+    let tree = Store.Commit.tree cm in
     encode_tree tr Store.Key.empty tree
     >|= fun () -> encode_commit_info cm info
 end
@@ -257,12 +256,12 @@ module Make (Store : Irmin.S) (Info : INFO) (Remote : REMOTE) = struct
                    encode_commit commit head >>= fun () -> Lwt.return_ok resp
                  | None ->
                    let err =
-                     Capnp_rpc.Error.exn ~ty:`Failed "Unable to set key"
+                     Capnp_rpc.Exception.v ~ty:`Failed "Unable to set key"
                    in
-                   Lwt.return_error err )
+                   Lwt.return_error (`Capnp (`Exception err)) )
                | Error (`Msg m) ->
-                 let err = Capnp_rpc.Error.exn ~ty:`Failed "%s" m in
-                 Lwt.return_error err )
+                 let err = Capnp_rpc.Exception.v ~ty:`Failed m in
+                 Lwt.return_error (`Capnp (`Exception err)) )
 
          method remove_impl req release_params =
            let open Ir.Remove in
@@ -377,13 +376,15 @@ module Make (Store : Irmin.S) (Info : INFO) (Remote : REMOTE) = struct
                >>= fun t ->
                Sync.fetch t (Remote.remote remote)
                >>= function
-               | Ok head ->
+               | Ok (`Head head) ->
                  let commit = Results.result_init results in
                  encode_commit commit head >>= fun () -> Lwt.return_ok resp
-               | Error err ->
-                 let s = Fmt.to_to_string Sync.pp_fetch_error err in
-                 let err = Capnp_rpc.Error.exn ~ty:`Failed "%s" s in
-                 Lwt.return_error err )
+               | Ok `Empty -> Lwt.return_ok resp
+               | Error (`Msg s) ->
+                 let err =
+                   Capnp_rpc.Exception.v ~ty:`Failed s
+                 in
+                 Lwt.return_error (`Capnp (`Exception err)))
 
          method push_impl req release_params =
            let open Ir.Push in
@@ -402,12 +403,14 @@ module Make (Store : Irmin.S) (Info : INFO) (Remote : REMOTE) = struct
                >>= fun t ->
                Sync.push t remote
                >>= function
-               | Ok () ->
+               | Ok _ ->
                  Lwt.return_ok resp
                | Error err ->
-                 let s = Fmt.to_to_string Sync.pp_push_error err in
-                 let err = Capnp_rpc.Error.exn ~ty:`Failed "%s" s in
-                 Lwt.return_error err )
+                 let err = 
+                   Fmt.to_to_string Sync.pp_push_error err
+                   |> Capnp_rpc.Exception.v ~ty:`Failed
+                 in
+                 Lwt.return_error (`Capnp (`Exception err)))
 
          method pull_impl req release_params =
            let open Ir.Pull in
@@ -445,27 +448,18 @@ module Make (Store : Irmin.S) (Info : INFO) (Remote : REMOTE) = struct
                >>= fun t ->
                Sync.pull t remote info
                >>= function
-               | Ok () -> (
-                 Store.Head.find t
-                 >>= function
-                 | Some head ->
+               | Ok (`Head head) ->
                    let commit = Results.result_init results in
                    encode_commit commit head >>= fun () -> Lwt.return_ok resp
-                 | None ->
-                   let err = Capnp_rpc.Error.exn ~ty:`Failed "No head" in
-                   Lwt.return_error err )
+                | Ok `Empty ->
+                   let err = Capnp_rpc.Exception.v ~ty:`Failed "No head" in
+                   Lwt.return_error (`Capnp (`Exception err))
                | Error (`Msg message) ->
-                 let err = Capnp_rpc.Error.exn ~ty:`Failed "%s" message in
-                 Lwt.return_error err
-               | Error `No_head ->
-                 let err = Capnp_rpc.Error.exn ~ty:`Failed "No head" in
-                 Lwt.return_error err
-               | Error `Not_available ->
-                 let err = Capnp_rpc.Error.exn ~ty:`Failed "Not available" in
-                 Lwt.return_error err
+                 let err = Capnp_rpc.Exception.v ~ty:`Failed message in
+                 Lwt.return_error (`Capnp (`Exception err))
                | Error (`Conflict _) ->
-                 let err = Capnp_rpc.Error.exn ~ty:`Failed "Conflict" in
-                 Lwt.return_error err )
+                 let err = Capnp_rpc.Exception.v ~ty:`Failed "Conflict" in
+                 Lwt.return_error (`Capnp (`Exception err)))
 
          method merge_impl req release_params =
            let open Ir.Merge in
@@ -508,8 +502,8 @@ module Make (Store : Irmin.S) (Info : INFO) (Remote : REMOTE) = struct
                      (Irmin.Type.pp_json Irmin.Merge.conflict_t)
                      e
                  in
-                 let err = Capnp_rpc.Error.exn ~ty:`Failed "%s" msg in
-                 Lwt.return_error err )
+                 let err = Capnp_rpc.Exception.v ~ty:`Failed msg in
+                 Lwt.return_error (`Capnp (`Exception err)) )
 
          method commit_info_impl req release_params =
            let open Ir.CommitInfo in
@@ -526,8 +520,8 @@ module Make (Store : Irmin.S) (Info : INFO) (Remote : REMOTE) = struct
                  let info = Results.result_init results in
                  encode_commit_info c info; Lwt.return_ok resp
                | None ->
-                 let err = Capnp_rpc.Error.exn ~ty:`Failed "Invalid commit" in
-                 Lwt.return_error err )
+                 let err = Capnp_rpc.Exception.v ~ty:`Failed "Invalid commit" in
+                 Lwt.return_error (`Capnp (`Exception err)) )
 
          method snapshot_impl req release_params =
            let open Ir.Snapshot in
@@ -550,8 +544,8 @@ module Make (Store : Irmin.S) (Info : INFO) (Remote : REMOTE) = struct
                  Results.result_set results (Store.Commit.hash commit |> s);
                  Lwt.return_ok resp
                | None ->
-                 let err = Capnp_rpc.Error.exn ~ty:`Failed "No head" in
-                 Lwt.return_error err )
+                 let err = Capnp_rpc.Exception.v ~ty:`Failed "No head" in
+                 Lwt.return_error (`Capnp (`Exception err)) )
 
          method revert_impl req release_params =
            let open Ir.Revert in
@@ -611,11 +605,8 @@ module Make (Store : Irmin.S) (Info : INFO) (Remote : REMOTE) = struct
                >>= (function
                      | Some commit ->
                        Store.Commit.parents commit
-                       >>= Lwt_list.map_p (fun commit ->
-                               Irmin.Type.to_string Store.Hash.t
-                                 (Store.Commit.hash commit)
-                               |> Lwt.return )
-                       >|= fun l -> ignore (Results.result_set_list results l)
+                       |> List.map (Irmin.Type.to_string Store.Hash.t)
+                       |> fun l -> ignore(Results.result_set_list results l); Lwt.return_unit
                      | None ->
                        ignore (Results.result_set_list results []);
                        Lwt.return_unit)
@@ -658,8 +649,8 @@ module Make (Store : Irmin.S) (Info : INFO) (Remote : REMOTE) = struct
                  Store.Branch.set ctx branch commit
                  >>= fun () -> Lwt.return_ok resp
                | None ->
-                 let err = Capnp_rpc.Error.exn ~ty:`Failed "Invalid commit" in
-                 Lwt.return_error err )
+                 let err = Capnp_rpc.Exception.v ~ty:`Failed "Invalid commit" in
+                 Lwt.return_error (`Capnp (`Exception err)) )
        end
 end
 
@@ -762,7 +753,7 @@ module Client (Store : Irmin.S) = struct
         ( Api.Reader.Irmin.Commit.hash_get commit
         |> Irmin.Type.of_string Store.Hash.t
         |> unwrap )
-    | Error err ->
+    | Error (`Capnp err) ->
       let err = Fmt.to_to_string Capnp_rpc.Error.pp err in
       Error (`Msg err)
 
@@ -839,7 +830,7 @@ module Client (Store : Irmin.S) = struct
           ( Api.Reader.Irmin.Commit.hash_get commit
           |> Irmin.Type.of_string Store.Hash.t
           |> unwrap )
-      | Error err ->
+      | Error (`Capnp err) ->
         let s = Fmt.to_to_string Capnp_rpc.Error.pp err in
         Error (`Msg s)
 
@@ -858,7 +849,7 @@ module Client (Store : Irmin.S) = struct
           ( Api.Reader.Irmin.Commit.hash_get commit
           |> Irmin.Type.of_string Store.Hash.t
           |> unwrap )
-      | Error err ->
+      | Error (`Capnp err) ->
         let s = Fmt.to_to_string Capnp_rpc.Error.pp err in
         Error (`Msg s)
 
@@ -871,7 +862,7 @@ module Client (Store : Irmin.S) = struct
       >|= function
       | Ok () ->
         Ok ()
-      | Error err ->
+      | Error (`Capnp err) ->
         let s = Fmt.to_to_string Capnp_rpc.Error.pp err in
         Error (`Msg s)
   end

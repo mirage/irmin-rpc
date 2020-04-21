@@ -1,6 +1,6 @@
 (executables
-  (names client server)
-   (libraries checkseum.c digestif.c irmin-rpc-unix))
+ (names client server)
+ (libraries checkseum.c digestif.c irmin-rpc-unix))
 
 (alias
  (name examples)

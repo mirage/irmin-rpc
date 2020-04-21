@@ -1,3 +1,4 @@
-(lang dune 1.0)
-
+(lang dune 2.5)
 (name irmin_rpc)
+(formatting (enabled_for dune))
+
