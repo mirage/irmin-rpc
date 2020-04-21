@@ -3,6 +3,5 @@
  (libraries checkseum.c digestif.c irmin-rpc-unix))
 
 (alias
- (name examples)
+ (name runtest)
  (deps client.exe server.exe))
-
