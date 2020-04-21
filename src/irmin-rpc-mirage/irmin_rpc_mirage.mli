@@ -1,13 +1,13 @@
 module Make
     (Store : Irmin.S)
-    (Clock : Mirage_clock_lwt.PCLOCK)
-    (Time : Mirage_time_lwt.S)
-    (Stack : Mirage_stack_lwt.V4) : sig
-  module Dns : Dns_resolver_mirage.S with type stack = Stack.t
+    (Random : Mirage_random.S)
+    (Mclock : Mirage_clock.MCLOCK)
+    (Pclock : Mirage_clock.PCLOCK)
+    (Time : Mirage_time.S)
+    (Stack : Mirage_stack.V4) : sig
+  module Dns : module type of Dns_client_mirage.Make (Random) (Mclock) (Stack)
 
-  module Server (C : sig
-    val clock : Clock.t
-  end) : sig
+  module Server : sig
     module Rpc : Irmin_rpc.S with module Store = Store
 
     type t

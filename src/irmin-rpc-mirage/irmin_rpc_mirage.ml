@@ -2,27 +2,20 @@ open Lwt.Infix
 
 module Make
     (Store : Irmin.S)
-    (Clock : Mirage_clock_lwt.PCLOCK)
-    (Time : Mirage_time_lwt.S)
-    (Stack : Mirage_stack_lwt.V4) =
+    (Random : Mirage_random.S)
+    (Mclock : Mirage_clock.MCLOCK)
+    (Pclock : Mirage_clock.PCLOCK)
+    (Time : Mirage_time.S)
+    (Stack : Mirage_stack.V4) =
 struct
-  module Dns = Dns_resolver_mirage.Make (Time) (Stack)
-  module Capnp_rpc_mirage = Capnp_rpc_mirage.Make (Stack) (Dns)
+  module Capnp_rpc_mirage = Capnp_rpc_mirage.Make (Random) (Mclock) (Stack)
+  module Dns = Capnp_rpc_mirage.Network.Dns
 
-  module Server (C : sig
-    val clock : Clock.t
-  end) =
-  struct
+  module Server = struct
     module Info = struct
       let info ?(author = "irmin-rpc") =
-        let module Info =
-          Irmin_mirage.Info
-            (struct
-              let name = author
-            end)
-            (Clock)
-        in
-        Info.f C.clock
+        let module Info = Irmin_mirage.Info (Pclock) in
+        Info.f ~author
     end
 
     module Remote = struct
@@ -46,7 +39,7 @@ struct
           ~public_address (`TCP port)
       in
       let service_id = Capnp_rpc_mirage.Vat_config.derived_id config "main" in
-      let restore = Capnp_rpc_lwt.Restorer.single service_id (Rpc.local repo) in
+      let restore = Capnp_rpc_net.Restorer.single service_id (Rpc.local repo) in
       Capnp_rpc_mirage.serve net config ~restore >|= fun vat ->
       { uri = Capnp_rpc_mirage.Vat.sturdy_uri vat service_id }
 

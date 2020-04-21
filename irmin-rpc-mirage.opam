@@ -13,7 +13,10 @@ depends:
     "dune" {build}
     "irmin-rpc"
     "irmin-mirage"
-    "capnp-rpc-mirage"
+    "mirage-time" {>= "2.0.0"}
+    "mirage-stack" {>= "2.0.0"}
+    "capnp-rpc-mirage" {>= "0.6.0"}
+    "git-mirage"
 ]
 
 depopts: []
