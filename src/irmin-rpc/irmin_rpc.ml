@@ -47,18 +47,11 @@ module Make (Store : Irmin.S) (Info : INFO) (Remote : REMOTE) = struct
              Params.branch_get req
              |> Irmin.Type.of_string Store.branch_t
              |> unwrap
-           in
-           let key =
+           and key =
              Params.key_get req |> Irmin.Type.of_string Store.key_t |> unwrap
-           in
-           let value = Params.value_get req in
-           let message =
-             if Params.has_message req then Params.message_get req else "set"
-           in
-           let author =
-             if Params.has_author req then Params.author_get req
-             else "irmin-rpc"
-           in
+           and value = Params.value_get req
+           and message = Params.message_get req
+           and author = Params.author_get req in
            release_params ();
            Service.return_lwt (fun () ->
                let resp, results =
@@ -90,17 +83,10 @@ module Make (Store : Irmin.S) (Info : INFO) (Remote : REMOTE) = struct
              Params.branch_get req
              |> Irmin.Type.of_string Store.branch_t
              |> unwrap
-           in
-           let key =
+           and key =
              Params.key_get req |> Irmin.Type.of_string Store.key_t |> unwrap
-           in
-           let message =
-             if Params.has_message req then Params.message_get req else "remove"
-           in
-           let author =
-             if Params.has_author req then Params.author_get req
-             else "irmin-rpc"
-           in
+           and message = Params.message_get req
+           and author = Params.author_get req in
            release_params ();
            Service.return_lwt (fun () ->
                let resp, results =
@@ -146,19 +132,11 @@ module Make (Store : Irmin.S) (Info : INFO) (Remote : REMOTE) = struct
              Params.branch_get req
              |> Irmin.Type.of_string Store.branch_t
              |> unwrap
-           in
-           let key =
+           and key =
              Params.key_get req |> Irmin.Type.of_string Store.key_t |> unwrap
-           in
-           let tree = Params.tree_get req in
-           let message =
-             if Params.has_message req then Params.message_get req
-             else "set_tree"
-           in
-           let author =
-             if Params.has_author req then Params.author_get req
-             else "irmin-rpc"
-           in
+           and tree = Params.tree_get req
+           and message = Params.message_get req
+           and author = Params.author_get req in
            release_params ();
            Service.return_lwt (fun () ->
                let resp, results =
@@ -199,8 +177,8 @@ module Make (Store : Irmin.S) (Info : INFO) (Remote : REMOTE) = struct
 
          method push_impl req release_params =
            let open Ir.Push in
-           let remote = Params.remote_get req |> Remote.remote in
-           let branch =
+           let remote = Params.remote_get req |> Remote.remote
+           and branch =
              Params.branch_get req
              |> Irmin.Type.of_string Store.branch_t
              |> unwrap
@@ -222,29 +200,15 @@ module Make (Store : Irmin.S) (Info : INFO) (Remote : REMOTE) = struct
 
          method pull_impl req release_params =
            let open Ir.Pull in
-           let remote = Params.remote_get req |> Remote.remote in
-           let branch =
+           let remote = Params.remote_get req |> Remote.remote
+           and branch =
              Params.branch_get req
              |> Irmin.Type.of_string Store.branch_t
              |> unwrap
-           in
-           let message =
-             if Params.has_message req then Some (Params.message_get req)
-             else None
-           in
-           let author =
-             if Params.has_author req then Some (Params.author_get req)
-             else None
-           in
+           and message = Params.message_get req
+           and author = Params.author_get req in
            release_params ();
-           let info =
-             match (message, author) with
-             | None, None -> `Set
-             | Some message, None -> `Merge (Info.info "%s" message)
-             | None, Some author -> `Merge (Info.info ~author "merge")
-             | Some message, Some author ->
-                 `Merge (Info.info ~author "%s" message)
-           in
+           let info = `Merge (Info.info ~author "%s" message) in
            Service.return_lwt (fun () ->
                let resp, results =
                  Service.Response.create Results.init_pointer
@@ -271,19 +235,12 @@ module Make (Store : Irmin.S) (Info : INFO) (Remote : REMOTE) = struct
              Params.branch_from_get req
              |> Irmin.Type.of_string Store.branch_t
              |> unwrap
-           in
-           let into_ =
+           and into_ =
              Params.branch_into_get req
              |> Irmin.Type.of_string Store.branch_t
              |> unwrap
-           in
-           let message =
-             if Params.has_message req then Params.message_get req else "merge"
-           in
-           let author =
-             if Params.has_author req then Params.author_get req
-             else "irmin-rpc"
-           in
+           and message = Params.message_get req
+           and author = Params.author_get req in
            release_params ();
            let info = Info.info ~author "%s" message in
            Service.return_lwt (fun () ->

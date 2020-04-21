@@ -23,6 +23,8 @@ let hash_s = Irmin.Type.to_string Store.Hash.t
 
 let commit = ref None
 
+let author, message = ("rpc-client-author", "rpc-client-message")
+
 let test_snapshot_no_head t _switch () =
   Lwt.catch
     (fun () ->
@@ -46,10 +48,10 @@ let test_remove t _switch () =
   commit := snapshot;
   match snapshot with
   | Some snapshot ->
-      Rpc.Client.remove t [ "abc" ] >>= fun hash ->
+      Rpc.Client.remove ~author ~message t [ "abc" ] >>= fun hash ->
       Alcotest.(check string)
         "Check snapshot hash" (hash_s hash) (hash_s snapshot);
-      Rpc.Client.remove t [ "a"; "b"; "c" ] >>= fun hash ->
+      Rpc.Client.remove ~author ~message t [ "a"; "b"; "c" ] >>= fun hash ->
       Alcotest.(check (neg string))
         "Check snapshot hash after modification" (hash_s hash) (hash_s snapshot);
       Lwt.return_unit
@@ -84,7 +86,9 @@ let test_set_tree t _switch () =
 (* TODO: look into why this fails when run with [opam install --build-test] but
    not [dune runtest] *)
 let test_pull t _switch () =
-  Rpc.Client.Sync.pull t "git://github.com/zshipko/irmin-rpc.git" >>= function
+  Rpc.Client.Sync.pull t ~author ~message
+    "git://github.com/zshipko/irmin-rpc.git"
+  >>= function
   | Ok _hash ->
       Rpc.Client.get t [ "README.md" ] >|= fun readme ->
       let f = open_in "../../../README.md" in
@@ -95,9 +99,10 @@ let test_pull t _switch () =
   | Error (`Msg e) -> Alcotest.fail e
 
 let test_merge t _switch () =
-  Rpc.Client.merge t ~branch:"testing" "master" >>= fun _ ->
-  Rpc.Client.set t ~branch:"testing" [ "README.md" ] "merged!" >>= fun _ ->
-  Rpc.Client.merge t "testing" >>= function
+  Rpc.Client.merge t ~author ~message ~branch:"testing" "master" >>= fun _ ->
+  Rpc.Client.set t ~author ~message ~branch:"testing" [ "README.md" ] "merged!"
+  >>= fun _ ->
+  Rpc.Client.merge t ~author ~message "testing" >>= function
   | Ok _hash ->
       Rpc.Client.get t [ "README.md" ] >|= fun readme ->
       Alcotest.(check string) "readme - merge" readme "merged!"

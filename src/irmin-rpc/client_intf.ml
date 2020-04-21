@@ -13,8 +13,8 @@ module type S = sig
   val set :
     t ->
     ?branch:Store.branch ->
-    ?author:string ->
-    ?message:string ->
+    author:string ->
+    message:string ->
     Store.key ->
     Store.contents ->
     Store.Hash.t Lwt.t
@@ -22,16 +22,16 @@ module type S = sig
   val remove :
     t ->
     ?branch:Store.branch ->
-    ?author:string ->
-    ?message:string ->
+    author:string ->
+    message:string ->
     Store.key ->
     Store.Hash.t Lwt.t
 
   val merge :
     t ->
     ?branch:Store.branch ->
-    ?author:string ->
-    ?message:string ->
+    author:string ->
+    message:string ->
     Store.branch ->
     (Store.Hash.t, [ `Msg of string ]) result Lwt.t
 
@@ -43,8 +43,8 @@ module type S = sig
     val set :
       t ->
       ?branch:Store.branch ->
-      ?author:string ->
-      ?message:string ->
+      author:string ->
+      message:string ->
       Store.key ->
       Store.tree ->
       Store.Hash.t Lwt.t
@@ -64,10 +64,13 @@ module type S = sig
     val pull :
       t ->
       ?branch:Store.branch ->
-      ?author:string ->
-      ?message:string ->
+      author:string ->
+      message:string ->
       string ->
       (Store.Hash.t, [ `Msg of string ]) result Lwt.t
+    (** [pull t ~branch ~author ~message remote] pulls from the given remote
+        into the specified branch. A local merge commit is constructed using the
+        [(author, message)] metadata. *)
 
     val push :
       t ->

@@ -20,12 +20,6 @@ module Make (Store : Irmin.S) = struct
         branch_set p br
     | None -> branch_set p "master"
 
-  let author_param author_set p author =
-    match author with Some author -> author_set p author | _ -> ()
-
-  let message_param message_set p message =
-    match message with Some message -> message_set p message | _ -> ()
-
   let find t ?branch key =
     let open Ir.Find in
     let req, p = Capability.Request.create Params.init_pointer in
@@ -44,12 +38,12 @@ module Make (Store : Irmin.S) = struct
     | Some x -> x
     | None -> raise (Error_message "Not found")
 
-  let set t ?branch ?author ?message key value =
+  let set t ?branch ~author ~message key value =
     let open Ir.Set in
     let req, p = Capability.Request.create Params.init_pointer in
     branch_param Params.branch_set p branch;
-    author_param Params.author_set p author;
-    message_param Params.message_set p message;
+    Params.author_set p author;
+    Params.message_set p message;
     let key_s = Irmin.Type.to_string Store.key_t key in
     Params.key_set p key_s;
     Params.value_set p (Irmin.Type.to_string Store.contents_t value);
@@ -61,12 +55,12 @@ module Make (Store : Irmin.S) = struct
       |> unwrap
     else raise (Error_message "Unable to set key")
 
-  let remove t ?branch ?author ?message key =
+  let remove t ?branch ~author ~message key =
     let open Ir.Remove in
     let req, p = Capability.Request.create Params.init_pointer in
     branch_param Params.branch_set p branch;
-    author_param Params.author_set p author;
-    message_param Params.message_set p message;
+    Params.author_set p author;
+    Params.message_set p message;
     let key_s = Irmin.Type.to_string Store.key_t key in
     Params.key_set p key_s;
     Capability.call_for_value_exn t method_id req >|= fun res ->
@@ -75,14 +69,14 @@ module Make (Store : Irmin.S) = struct
     |> Irmin.Type.of_string Store.Hash.t
     |> unwrap
 
-  let merge t ?branch ?author ?message from_ =
+  let merge t ?branch ~author ~message from_ =
     let open Ir.Merge in
     let req, p = Capability.Request.create Params.init_pointer in
     branch_param Params.branch_into_set p branch;
     let from_ = Irmin.Type.to_string Store.branch_t from_ in
     Params.branch_from_set p from_;
-    author_param Params.author_set p author;
-    message_param Params.message_set p message;
+    Params.author_set p author;
+    Params.message_set p message;
     Capability.call_for_value t method_id req >|= fun res ->
     match res with
     | Ok res ->
@@ -114,12 +108,12 @@ module Make (Store : Irmin.S) = struct
     Results.result_get res
 
   module Tree = struct
-    let set t ?branch ?author ?message key tree =
+    let set t ?branch ~author ~message key tree =
       let open Ir.SetTree in
       let req, p = Capability.Request.create Params.init_pointer in
       branch_param Params.branch_set p branch;
-      author_param Params.author_set p author;
-      message_param Params.message_set p message;
+      Params.author_set p author;
+      Params.message_set p message;
       let key_s = Irmin.Type.to_string Store.key_t key in
       Params.key_set p key_s;
       let tr = Params.tree_init p in
@@ -165,12 +159,12 @@ module Make (Store : Irmin.S) = struct
           let s = Fmt.to_to_string Capnp_rpc.Error.pp err in
           Error (`Msg s)
 
-    let pull t ?branch ?author ?message remote =
+    let pull t ?branch ~author ~message remote =
       let open Ir.Pull in
       let req, p = Capability.Request.create Params.init_pointer in
       branch_param Params.branch_set p branch;
-      author_param Params.author_set p author;
-      message_param Params.message_set p message;
+      Params.author_set p author;
+      Params.message_set p message;
       Params.remote_set p remote;
       Capability.call_for_value t method_id req >|= function
       | Ok res ->
