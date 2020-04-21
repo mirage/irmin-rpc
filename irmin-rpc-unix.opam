@@ -12,10 +12,10 @@ depends:
 [
     "ocaml" {>= "4.03.0"}
     "dune" {build}
-    "alcotest-lwt" {test}
     "irmin-rpc"
     "irmin-unix"
     "capnp-rpc-unix"
+    "alcotest-lwt" {>= "1.1.0" & with-test}
 ]
 
 depopts: []
