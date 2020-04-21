@@ -25,9 +25,7 @@ module Make (Store : Irmin.S) (Remote : Irmin_rpc.REMOTE) = struct
   end
 
   module Client = struct
-    type t = Irmin_rpc.t
-
-    include Irmin_rpc.Client (Store)
+    include Irmin_rpc.Client.Make (Store)
 
     let connect uri =
       let client_vat = Capnp_rpc_unix.client_only_vat () in
