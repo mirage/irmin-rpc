@@ -27,10 +27,8 @@ module Make
   end
 
   module Client : sig
-    type t = Irmin_rpc.t
+    include Irmin_rpc.Client.S with module Store = Store
 
     val connect : Stack.t -> Uri.t -> t Lwt.t
-
-    include Irmin_rpc.CLIENT with module Store = Store
   end
 end

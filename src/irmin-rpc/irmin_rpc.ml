@@ -1,85 +1,19 @@
 include Irmin_rpc_intf
 open Lwt.Infix
 open Capnp_rpc_lwt
-module Api = Irmin_api.MakeRPC (Capnp_rpc_lwt)
+module Client = Client
 
 exception Error_message of string
 
 let unwrap = function Ok x -> x | Error (`Msg m) -> raise (Error_message m)
 
-module Conv (Store : Irmin.S) = struct
-  let rec encode_tree tr key (tree : Store.tree) : unit Lwt.t =
-    let module Tree = Api.Builder.Irmin.Tree in
-    let module Node = Api.Builder.Irmin.Node in
-    let ks = Irmin.Type.to_string Store.key_t key in
-    ignore @@ Tree.key_set tr ks;
-    Store.Tree.to_concrete tree >>= function
-    | `Contents (contents, _) ->
-        let _ =
-          Tree.contents_set tr (Irmin.Type.to_string Store.contents_t contents)
-        in
-        Lwt.return_unit
-    | `Tree l ->
-        Lwt_list.map_p
-          (fun (step, tree) ->
-            let node = Node.init_root () in
-            let step_s = Irmin.Type.to_string Store.step_t step in
-            Node.step_set node step_s;
-            let tt = Node.tree_init node in
-            let tree = Store.Tree.of_concrete tree in
-            encode_tree tt (Store.Key.rcons key step) tree >|= fun () -> node)
-          l
-        >>= fun l ->
-        let _ = Tree.node_set_list tr l in
-        Lwt.return_unit
-
-  let rec decode_tree tree : Store.Tree.concrete =
-    let module Tree = Api.Reader.Irmin.Tree in
-    let module Node = Api.Reader.Irmin.Node in
-    match Tree.get tree with
-    | Node l ->
-        let l = Capnp.Array.to_list l in
-        `Tree
-          (List.map
-             (fun node ->
-               let step =
-                 Node.step_get node
-                 |> Irmin.Type.of_string Store.step_t
-                 |> unwrap
-               in
-               let tree = Node.tree_get node |> decode_tree in
-               (step, tree))
-             l)
-    | Contents c ->
-        let c = Irmin.Type.of_string Store.contents_t c |> unwrap in
-        `Contents (c, Store.Metadata.default)
-    | Undefined _ -> `Tree []
-
-  let encode_commit_info cm info =
-    let module Info = Api.Builder.Irmin.Info in
-    let i = Store.Commit.info cm in
-    Info.author_set info (Irmin.Info.author i);
-    Info.message_set info (Irmin.Info.message i);
-    Info.date_set info (Irmin.Info.date i)
-
-  let encode_commit commit cm =
-    let module Commit = Api.Builder.Irmin.Commit in
-    let module Info = Api.Builder.Irmin.Info in
-    let info = Commit.info_init commit in
-    let hash = Irmin.Type.to_string Store.Hash.t (Store.Commit.hash cm) in
-    Commit.hash_set commit hash;
-    let tr = Commit.tree_init commit in
-    let tree = Store.Commit.tree cm in
-    encode_tree tr Store.Key.empty tree >|= fun () -> encode_commit_info cm info
-end
-
 module Make (Store : Irmin.S) (Info : INFO) (Remote : REMOTE) = struct
   module Store = Store
   module Sync = Irmin.Sync (Store)
-  include Conv (Store)
+  module Codec = Codec.Make (Store)
 
   let local ctx =
-    let module Ir = Api.Service.Irmin in
+    let module Ir = Raw.Service.Irmin in
     Ir.local
     @@ object
          inherit Ir.service
@@ -139,7 +73,7 @@ module Make (Store : Irmin.S) (Info : INFO) (Remote : REMOTE) = struct
                    Store.Head.find t >>= function
                    | Some head ->
                        let commit = Results.result_init results in
-                       encode_commit commit head >>= fun () ->
+                       Codec.encode_commit commit head >>= fun () ->
                        Lwt.return_ok resp
                    | None ->
                        let err =
@@ -177,12 +111,12 @@ module Make (Store : Irmin.S) (Info : INFO) (Remote : REMOTE) = struct
                >>= fun () ->
                Store.Head.get t >>= fun head ->
                let commit = Results.result_init results in
-               encode_commit commit head >>= fun () -> Lwt.return_ok resp)
+               Codec.encode_commit commit head >>= fun () -> Lwt.return_ok resp)
 
          method find_tree_impl req release_params =
            let open Ir.FindTree in
-           let module Tree = Api.Builder.Irmin.Tree in
-           let module Node = Api.Builder.Irmin.Node in
+           let module Tree = Raw.Builder.Irmin.Tree in
+           let module Node = Raw.Builder.Irmin.Node in
            let branch =
              Params.branch_get req
              |> Irmin.Type.of_string Store.branch_t
@@ -200,13 +134,14 @@ module Make (Store : Irmin.S) (Info : INFO) (Remote : REMOTE) = struct
                Store.find_tree t key >>= function
                | Some tree ->
                    let tr = Results.result_init results in
-                   encode_tree tr key tree >>= fun () -> Lwt.return_ok resp
+                   Codec.encode_tree tr key tree >>= fun () ->
+                   Lwt.return_ok resp
                | None -> Lwt.return_ok resp)
 
          method set_tree_impl req release_params =
            let open Ir.SetTree in
-           let module Tree = Api.Builder.Irmin.Tree in
-           let module Node = Api.Builder.Irmin.Node in
+           let module Tree = Raw.Builder.Irmin.Tree in
+           let module Node = Raw.Builder.Irmin.Node in
            let branch =
              Params.branch_get req
              |> Irmin.Type.of_string Store.branch_t
@@ -230,13 +165,13 @@ module Make (Store : Irmin.S) (Info : INFO) (Remote : REMOTE) = struct
                  Service.Response.create Results.init_pointer
                in
                Store.of_branch ctx branch >>= fun t ->
-               let tree = decode_tree tree |> Store.Tree.of_concrete in
+               let tree = Codec.decode_tree tree |> Store.Tree.of_concrete in
                Store.set_tree_exn t key tree
                  ~info:(Info.info ~author "%s" message)
                >>= fun () ->
                Store.Head.get t >>= fun head ->
                let commit = Results.result_init results in
-               encode_commit commit head >>= fun () -> Lwt.return_ok resp)
+               Codec.encode_commit commit head >>= fun () -> Lwt.return_ok resp)
 
          method clone_impl req release_params =
            let open Ir.Clone in
@@ -255,7 +190,8 @@ module Make (Store : Irmin.S) (Info : INFO) (Remote : REMOTE) = struct
                Sync.fetch t (Remote.remote remote) >>= function
                | Ok (`Head head) ->
                    let commit = Results.result_init results in
-                   encode_commit commit head >>= fun () -> Lwt.return_ok resp
+                   Codec.encode_commit commit head >>= fun () ->
+                   Lwt.return_ok resp
                | Ok `Empty -> Lwt.return_ok resp
                | Error (`Msg s) ->
                    let err = Capnp_rpc.Exception.v ~ty:`Failed s in
@@ -317,7 +253,8 @@ module Make (Store : Irmin.S) (Info : INFO) (Remote : REMOTE) = struct
                Sync.pull t remote info >>= function
                | Ok (`Head head) ->
                    let commit = Results.result_init results in
-                   encode_commit commit head >>= fun () -> Lwt.return_ok resp
+                   Codec.encode_commit commit head >>= fun () ->
+                   Lwt.return_ok resp
                | Ok `Empty ->
                    let err = Capnp_rpc.Exception.v ~ty:`Failed "No head" in
                    Lwt.return_error (`Capnp (`Exception err))
@@ -359,7 +296,8 @@ module Make (Store : Irmin.S) (Info : INFO) (Remote : REMOTE) = struct
                | Ok () ->
                    Store.Head.get t >>= fun head ->
                    let commit = Results.result_init results in
-                   encode_commit commit head >>= fun () -> Lwt.return_ok resp
+                   Codec.encode_commit commit head >>= fun () ->
+                   Lwt.return_ok resp
                | Error e ->
                    let msg =
                      Fmt.to_to_string
@@ -381,7 +319,7 @@ module Make (Store : Irmin.S) (Info : INFO) (Remote : REMOTE) = struct
                Store.Commit.of_hash ctx hash >>= function
                | Some c ->
                    let info = Results.result_init results in
-                   encode_commit_info c info;
+                   Codec.encode_commit_info c info;
                    Lwt.return_ok resp
                | None ->
                    let err =
@@ -514,247 +452,4 @@ module Make (Store : Irmin.S) (Info : INFO) (Remote : REMOTE) = struct
                    in
                    Lwt.return_error (`Capnp (`Exception err)))
        end
-end
-
-module Client (Store : Irmin.S) = struct
-  module Store = Store
-  module Ir = Api.Client.Irmin
-  include Conv (Store)
-
-  let branch_param branch_set p branch =
-    match branch with
-    | Some br ->
-        let br = Irmin.Type.to_string Store.branch_t br in
-        branch_set p br
-    | None -> branch_set p "master"
-
-  let author_param author_set p author =
-    match author with Some author -> author_set p author | _ -> ()
-
-  let message_param message_set p message =
-    match message with Some message -> message_set p message | _ -> ()
-
-  let find t ?branch key =
-    let open Ir.Find in
-    let req, p = Capability.Request.create Params.init_pointer in
-    branch_param Params.branch_set p branch;
-    let key_s = Irmin.Type.to_string Store.key_t key in
-    Params.key_set p key_s |> ignore;
-    Capability.call_for_value_exn t method_id req >|= fun res ->
-    if Results.has_result res then
-      Some
-        ( Irmin.Type.of_string Store.contents_t (Results.result_get res)
-        |> unwrap )
-    else None
-
-  let get t ?branch key =
-    find t ?branch key >|= function
-    | Some x -> x
-    | None -> raise (Error_message "Not found")
-
-  let set t ?branch ?author ?message key value =
-    let open Ir.Set in
-    let req, p = Capability.Request.create Params.init_pointer in
-    branch_param Params.branch_set p branch;
-    author_param Params.author_set p author;
-    message_param Params.message_set p message;
-    let key_s = Irmin.Type.to_string Store.key_t key in
-    Params.key_set p key_s |> ignore;
-    Params.value_set p (Irmin.Type.to_string Store.contents_t value);
-    Capability.call_for_value_exn t method_id req >|= fun res ->
-    if Results.has_result res then
-      let commit = Results.result_get res in
-      Api.Reader.Irmin.Commit.hash_get commit
-      |> Irmin.Type.of_string Store.Hash.t
-      |> unwrap
-    else raise (Error_message "Unable to set key")
-
-  let remove t ?branch ?author ?message key =
-    let open Ir.Remove in
-    let req, p = Capability.Request.create Params.init_pointer in
-    branch_param Params.branch_set p branch;
-    author_param Params.author_set p author;
-    message_param Params.message_set p message;
-    let key_s = Irmin.Type.to_string Store.key_t key in
-    Params.key_set p key_s |> ignore;
-    Capability.call_for_value_exn t method_id req >|= fun res ->
-    let commit = Results.result_get res in
-    Api.Reader.Irmin.Commit.hash_get commit
-    |> Irmin.Type.of_string Store.Hash.t
-    |> unwrap
-
-  let merge t ?branch ?author ?message from_ =
-    let open Ir.Merge in
-    let req, p = Capability.Request.create Params.init_pointer in
-    branch_param Params.branch_into_set p branch;
-    let from_ = Irmin.Type.to_string Store.branch_t from_ in
-    Params.branch_from_set p from_;
-    author_param Params.author_set p author;
-    message_param Params.message_set p message;
-    Capability.call_for_value t method_id req >|= fun res ->
-    match res with
-    | Ok res ->
-        let commit = Results.result_get res in
-        Ok
-          ( Api.Reader.Irmin.Commit.hash_get commit
-          |> Irmin.Type.of_string Store.Hash.t
-          |> unwrap )
-    | Error (`Capnp err) ->
-        let err = Fmt.to_to_string Capnp_rpc.Error.pp err in
-        Error (`Msg err)
-
-  let snapshot ?branch t =
-    let open Ir.Snapshot in
-    let req, p = Capability.Request.create Params.init_pointer in
-    branch_param Params.branch_set p branch;
-    Capability.call_for_value_exn t method_id req >|= fun res ->
-    if Results.has_result res then
-      let commit = Results.result_get res in
-      Some (Irmin.Type.of_string Store.Hash.t commit |> unwrap)
-    else None
-
-  let revert t ?branch hash =
-    let open Ir.Revert in
-    let req, p = Capability.Request.create Params.init_pointer in
-    branch_param Params.branch_set p branch;
-    Params.hash_set p (Irmin.Type.to_string Store.Hash.t hash);
-    Capability.call_for_value_exn t method_id req >|= fun res ->
-    Results.result_get res
-
-  module Tree = struct
-    let set t ?branch ?author ?message key tree =
-      let open Ir.SetTree in
-      let req, p = Capability.Request.create Params.init_pointer in
-      branch_param Params.branch_set p branch;
-      author_param Params.author_set p author;
-      message_param Params.message_set p message;
-      let key_s = Irmin.Type.to_string Store.key_t key in
-      Params.key_set p key_s |> ignore;
-      let tr = Params.tree_init p in
-      encode_tree tr key tree >>= fun () ->
-      Capability.call_for_value_exn t method_id req >|= fun res ->
-      let commit = Results.result_get res in
-      Api.Reader.Irmin.Commit.hash_get commit
-      |> Irmin.Type.of_string Store.Hash.t
-      |> unwrap
-
-    let find t ?branch key =
-      let open Ir.FindTree in
-      let req, p = Capability.Request.create Params.init_pointer in
-      branch_param Params.branch_set p branch;
-      let key_s = Irmin.Type.to_string Store.key_t key in
-      Params.key_set p key_s |> ignore;
-      Capability.call_for_value_exn t method_id req >|= fun res ->
-      if Results.has_result res then
-        Some (Results.result_get res |> decode_tree |> Store.Tree.of_concrete)
-      else None
-
-    let get t ?branch key =
-      find t ?branch key >|= function
-      | Some x -> x
-      | None -> raise (Error_message "Not found")
-  end
-
-  module Sync = struct
-    let clone t ?branch remote =
-      let open Ir.Clone in
-      let req, p = Capability.Request.create Params.init_pointer in
-      branch_param Params.branch_set p branch;
-      Params.remote_set p remote;
-      Capability.call_for_value t method_id req >|= function
-      | Ok res ->
-          let commit = Results.result_get res in
-          Ok
-            ( Api.Reader.Irmin.Commit.hash_get commit
-            |> Irmin.Type.of_string Store.Hash.t
-            |> unwrap )
-      | Error (`Capnp err) ->
-          let s = Fmt.to_to_string Capnp_rpc.Error.pp err in
-          Error (`Msg s)
-
-    let pull t ?branch ?author ?message remote =
-      let open Ir.Pull in
-      let req, p = Capability.Request.create Params.init_pointer in
-      branch_param Params.branch_set p branch;
-      author_param Params.author_set p author;
-      message_param Params.message_set p message;
-      Params.remote_set p remote;
-      Capability.call_for_value t method_id req >|= function
-      | Ok res ->
-          let commit = Results.result_get res in
-          Ok
-            ( Api.Reader.Irmin.Commit.hash_get commit
-            |> Irmin.Type.of_string Store.Hash.t
-            |> unwrap )
-      | Error (`Capnp err) ->
-          let s = Fmt.to_to_string Capnp_rpc.Error.pp err in
-          Error (`Msg s)
-
-    let push t ?branch remote =
-      let open Ir.Push in
-      let req, p = Capability.Request.create Params.init_pointer in
-      branch_param Params.branch_set p branch;
-      Params.remote_set p remote;
-      Capability.call_for_unit t method_id req >|= function
-      | Ok () -> Ok ()
-      | Error (`Capnp err) ->
-          let s = Fmt.to_to_string Capnp_rpc.Error.pp err in
-          Error (`Msg s)
-  end
-
-  module Commit = struct
-    let info t hash =
-      let open Ir.CommitInfo in
-      let req, p = Capability.Request.create Params.init_pointer in
-      Params.hash_set p (Irmin.Type.to_string Store.Hash.t hash);
-      Capability.call_for_value_exn t method_id req >|= fun res ->
-      if Results.has_result res then
-        let info = Results.result_get res in
-        let module Info = Api.Reader.Irmin.Info in
-        let author = Info.author_get info in
-        let date = Info.date_get info in
-        let message = Info.message_get info in
-        Some (Irmin.Info.v ~date ~author message)
-      else None
-
-    let history t hash =
-      let open Ir.CommitHistory in
-      let req, p = Capability.Request.create Params.init_pointer in
-      Params.hash_set p (Irmin.Type.to_string Store.Hash.t hash);
-      Capability.call_for_value_exn t method_id req >>= fun res ->
-      let l = Results.result_get_list res in
-      Lwt_list.filter_map_s
-        (fun x ->
-          match Irmin.Type.of_string Store.Hash.t x with
-          | Ok b -> Lwt.return_some b
-          | Error _ -> Lwt.return_none)
-        l
-  end
-
-  module Branch = struct
-    let remove t branch =
-      let open Ir.RemoveBranch in
-      let req, p = Capability.Request.create Params.init_pointer in
-      branch_param Params.branch_set p (Some branch);
-      Capability.call_for_unit_exn t method_id req
-
-    let create t name hash =
-      let open Ir.CreateBranch in
-      let req, p = Capability.Request.create Params.init_pointer in
-      branch_param Params.branch_set p (Some name);
-      Params.hash_set p (Irmin.Type.to_string Store.Hash.t hash);
-      Capability.call_for_unit_exn t method_id req
-
-    let list t =
-      let open Ir.Branches in
-      let req, _ = Capability.Request.create Params.init_pointer in
-      Capability.call_for_value_exn t method_id req >>= fun res ->
-      let l = Results.result_get_list res in
-      Lwt_list.filter_map_s
-        (fun x ->
-          match Irmin.Type.of_string Store.branch_t x with
-          | Ok b -> Lwt.return_some b
-          | Error _ -> Lwt.return_none)
-        l
-  end
 end

@@ -18,10 +18,8 @@ module Make (Store : Irmin.S) (Remote : Irmin_rpc.REMOTE) : sig
   end
 
   module Client : sig
-    type t = Irmin_rpc.t
+    include Irmin_rpc.Client.S with module Store = Store
 
     val connect : Uri.t -> t Lwt.t
-
-    include Irmin_rpc.CLIENT with module Store = Store
   end
 end
