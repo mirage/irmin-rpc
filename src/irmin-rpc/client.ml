@@ -31,7 +31,7 @@ module Make (Store : Irmin.S) = struct
     let req, p = Capability.Request.create Params.init_pointer in
     branch_param Params.branch_set p branch;
     let key_s = Irmin.Type.to_string Store.key_t key in
-    Params.key_set p key_s |> ignore;
+    Params.key_set p key_s;
     Capability.call_for_value_exn t method_id req >|= fun res ->
     if Results.has_result res then
       Some
@@ -51,7 +51,7 @@ module Make (Store : Irmin.S) = struct
     author_param Params.author_set p author;
     message_param Params.message_set p message;
     let key_s = Irmin.Type.to_string Store.key_t key in
-    Params.key_set p key_s |> ignore;
+    Params.key_set p key_s;
     Params.value_set p (Irmin.Type.to_string Store.contents_t value);
     Capability.call_for_value_exn t method_id req >|= fun res ->
     if Results.has_result res then
@@ -68,7 +68,7 @@ module Make (Store : Irmin.S) = struct
     author_param Params.author_set p author;
     message_param Params.message_set p message;
     let key_s = Irmin.Type.to_string Store.key_t key in
-    Params.key_set p key_s |> ignore;
+    Params.key_set p key_s;
     Capability.call_for_value_exn t method_id req >|= fun res ->
     let commit = Results.result_get res in
     Raw.Reader.Irmin.Commit.hash_get commit
@@ -121,7 +121,7 @@ module Make (Store : Irmin.S) = struct
       author_param Params.author_set p author;
       message_param Params.message_set p message;
       let key_s = Irmin.Type.to_string Store.key_t key in
-      Params.key_set p key_s |> ignore;
+      Params.key_set p key_s;
       let tr = Params.tree_init p in
       Codec.encode_tree tr key tree >>= fun () ->
       Capability.call_for_value_exn t method_id req >|= fun res ->
@@ -135,7 +135,7 @@ module Make (Store : Irmin.S) = struct
       let req, p = Capability.Request.create Params.init_pointer in
       branch_param Params.branch_set p branch;
       let key_s = Irmin.Type.to_string Store.key_t key in
-      Params.key_set p key_s |> ignore;
+      Params.key_set p key_s;
       Capability.call_for_value_exn t method_id req >|= fun res ->
       if Results.has_result res then
         Some

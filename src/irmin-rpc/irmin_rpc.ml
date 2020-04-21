@@ -387,7 +387,13 @@ module Make (Store : Irmin.S) (Info : INFO) (Remote : REMOTE) = struct
                    (fun x -> Irmin.Type.to_string Store.branch_t x)
                    branches
                in
-               let _ = Results.result_set_list results l in
+               let (_
+                     : ( Irmin_api.rw,
+                         string,
+                         Raw.Reader.builder_array_t )
+                       Capnp.Array.t) =
+                 Results.result_set_list results l
+               in
                Lwt.return_ok resp)
 
          method commit_history_impl req release_params =
@@ -400,16 +406,22 @@ module Make (Store : Irmin.S) (Info : INFO) (Remote : REMOTE) = struct
                let resp, results =
                  Service.Response.create Results.init_pointer
                in
-               (Store.Commit.of_hash ctx commit >>= function
-                | Some commit ->
-                    Store.Commit.parents commit
-                    |> List.map (Irmin.Type.to_string Store.Hash.t)
-                    |> fun l ->
-                    ignore (Results.result_set_list results l);
-                    Lwt.return_unit
-                | None ->
-                    ignore (Results.result_set_list results []);
-                    Lwt.return_unit)
+               ( Store.Commit.of_hash ctx commit >>= fun commit ->
+                 let l =
+                   match commit with
+                   | Some commit ->
+                       Store.Commit.parents commit
+                       |> List.map (Irmin.Type.to_string Store.Hash.t)
+                   | None -> []
+                 in
+                 let (_
+                       : ( Irmin_api.rw,
+                           string,
+                           Raw.Reader.builder_array_t )
+                         Capnp.Array.t) =
+                   Results.result_set_list results l
+                 in
+                 Lwt.return_unit )
                >>= fun () -> Lwt.return_ok resp)
 
          method remove_branch_impl req release_params =
