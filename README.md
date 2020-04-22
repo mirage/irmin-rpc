@@ -5,7 +5,7 @@
 %%VERSION%%
 
 `irmin-rpc` is a Cap'N'Proto RPC server and client for Irmin. It allows for
-remote Irmin stores to be easily queried and modified using an API that is vert
+remote Irmin stores to be easily queried and modified using an API that is very
 similar to the native Irmin API.
 
 `irmin-rpc` is distributed under the ISC license.
@@ -20,8 +20,8 @@ Homepage: https://github.com/mirage/irmin-rpc
 $ opam pin add irmin-rpc https://github.com/mirage/irmin-rpc.git
 ```
 
-After that, you will most likely want to install `irmin-rpc-unix` or
-(`irmin-rpc-mirage`):
+After that, you will most likely want to install `irmin-rpc-unix` (or
+`irmin-rpc-mirage`):
 
 ```shell
 $ opam pin add irmin-rpc-unix https://github.com/mirage/irmin-rpc.git
@@ -95,7 +95,7 @@ can be consulted [online][doc] or via `odig doc irmin-rpc`.
 
 ## Tests
 
-In the distribution sample programs and tests are located in the [`test`](test)
+In the distribution, sample programs and tests are located in the [`test`](test)
 directory. They can be built and run with:
 
     dune runtest
