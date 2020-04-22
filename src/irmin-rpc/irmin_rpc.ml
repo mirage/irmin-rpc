@@ -21,13 +21,9 @@ module Make (Store : Irmin.S) (Info : INFO) (Remote : REMOTE) = struct
          method find_impl req release_params =
            let open Ir.Find in
            let branch =
-             Params.branch_get req
-             |> Irmin.Type.of_string Store.branch_t
-             |> unwrap
+             Params.branch_get req |> Codec.Branch.decode |> unwrap
            in
-           let key =
-             Params.key_get req |> Irmin.Type.of_string Store.key_t |> unwrap
-           in
+           let key = Params.key_get req |> Codec.Key.decode |> unwrap in
            release_params ();
            Service.return_lwt (fun () ->
                let resp, results =
@@ -36,19 +32,14 @@ module Make (Store : Irmin.S) (Info : INFO) (Remote : REMOTE) = struct
                Store.of_branch ctx branch >>= fun t ->
                Store.find t key >>= function
                | Some value ->
-                   Results.result_set results
-                     (Irmin.Type.to_string Store.contents_t value);
+                   Results.result_set results (Codec.Contents.encode value);
                    Lwt.return_ok resp
                | None -> Lwt.return_ok resp)
 
          method set_impl req release_params =
            let open Ir.Set in
-           let branch =
-             Params.branch_get req
-             |> Irmin.Type.of_string Store.branch_t
-             |> unwrap
-           and key =
-             Params.key_get req |> Irmin.Type.of_string Store.key_t |> unwrap
+           let branch = Params.branch_get req |> Codec.Branch.decode |> unwrap
+           and key = Params.key_get req |> Codec.Key.decode |> unwrap
            and value = Params.value_get req
            and message = Params.message_get req
            and author = Params.author_get req in
@@ -58,7 +49,7 @@ module Make (Store : Irmin.S) (Info : INFO) (Remote : REMOTE) = struct
                  Service.Response.create Results.init_pointer
                in
                Store.of_branch ctx branch >>= fun t ->
-               match Irmin.Type.of_string Store.contents_t value with
+               match Codec.Contents.decode value with
                | Ok value -> (
                    Store.set_exn t key value
                      ~info:(Info.info ~author "%s" message)
@@ -79,12 +70,8 @@ module Make (Store : Irmin.S) (Info : INFO) (Remote : REMOTE) = struct
 
          method remove_impl req release_params =
            let open Ir.Remove in
-           let branch =
-             Params.branch_get req
-             |> Irmin.Type.of_string Store.branch_t
-             |> unwrap
-           and key =
-             Params.key_get req |> Irmin.Type.of_string Store.key_t |> unwrap
+           let branch = Params.branch_get req |> Codec.Branch.decode |> unwrap
+           and key = Params.key_get req |> Codec.Key.decode |> unwrap
            and message = Params.message_get req
            and author = Params.author_get req in
            release_params ();
@@ -104,13 +91,9 @@ module Make (Store : Irmin.S) (Info : INFO) (Remote : REMOTE) = struct
            let module Tree = Raw.Builder.Irmin.Tree in
            let module Node = Raw.Builder.Irmin.Node in
            let branch =
-             Params.branch_get req
-             |> Irmin.Type.of_string Store.branch_t
-             |> unwrap
+             Params.branch_get req |> Codec.Branch.decode |> unwrap
            in
-           let key =
-             Params.key_get req |> Irmin.Type.of_string Store.key_t |> unwrap
-           in
+           let key = Params.key_get req |> Codec.Key.decode |> unwrap in
            release_params ();
            Service.return_lwt (fun () ->
                let resp, results =
@@ -128,12 +111,8 @@ module Make (Store : Irmin.S) (Info : INFO) (Remote : REMOTE) = struct
            let open Ir.SetTree in
            let module Tree = Raw.Builder.Irmin.Tree in
            let module Node = Raw.Builder.Irmin.Node in
-           let branch =
-             Params.branch_get req
-             |> Irmin.Type.of_string Store.branch_t
-             |> unwrap
-           and key =
-             Params.key_get req |> Irmin.Type.of_string Store.key_t |> unwrap
+           let branch = Params.branch_get req |> Codec.Branch.decode |> unwrap
+           and key = Params.key_get req |> Codec.Key.decode |> unwrap
            and tree = Params.tree_get req
            and message = Params.message_get req
            and author = Params.author_get req in
@@ -155,9 +134,7 @@ module Make (Store : Irmin.S) (Info : INFO) (Remote : REMOTE) = struct
            let open Ir.Clone in
            let remote = Params.remote_get req in
            let branch =
-             Params.branch_get req
-             |> Irmin.Type.of_string Store.branch_t
-             |> unwrap
+             Params.branch_get req |> Codec.Branch.decode |> unwrap
            in
            release_params ();
            Service.return_lwt (fun () ->
@@ -179,9 +156,7 @@ module Make (Store : Irmin.S) (Info : INFO) (Remote : REMOTE) = struct
            let open Ir.Push in
            let remote = Params.remote_get req |> Remote.remote
            and branch =
-             Params.branch_get req
-             |> Irmin.Type.of_string Store.branch_t
-             |> unwrap
+             Params.branch_get req |> Codec.Branch.decode |> unwrap
            in
            release_params ();
            Service.return_lwt (fun () ->
@@ -201,10 +176,7 @@ module Make (Store : Irmin.S) (Info : INFO) (Remote : REMOTE) = struct
          method pull_impl req release_params =
            let open Ir.Pull in
            let remote = Params.remote_get req |> Remote.remote
-           and branch =
-             Params.branch_get req
-             |> Irmin.Type.of_string Store.branch_t
-             |> unwrap
+           and branch = Params.branch_get req |> Codec.Branch.decode |> unwrap
            and message = Params.message_get req
            and author = Params.author_get req in
            release_params ();
@@ -232,13 +204,9 @@ module Make (Store : Irmin.S) (Info : INFO) (Remote : REMOTE) = struct
          method merge_impl req release_params =
            let open Ir.Merge in
            let from_ =
-             Params.branch_from_get req
-             |> Irmin.Type.of_string Store.branch_t
-             |> unwrap
+             Params.branch_from_get req |> Codec.Branch.decode |> unwrap
            and into_ =
-             Params.branch_into_get req
-             |> Irmin.Type.of_string Store.branch_t
-             |> unwrap
+             Params.branch_into_get req |> Codec.Branch.decode |> unwrap
            and message = Params.message_get req
            and author = Params.author_get req in
            release_params ();
@@ -272,7 +240,7 @@ module Make (Store : Irmin.S) (Info : INFO) (Remote : REMOTE) = struct
                let resp, results =
                  Service.Response.create Results.init_pointer
                in
-               let hash = Irmin.Type.of_string Store.Hash.t hash |> unwrap in
+               let hash = Codec.Hash.decode hash |> unwrap in
                Store.Commit.of_hash ctx hash >>= function
                | Some c ->
                    let info = Results.result_init results in
@@ -287,9 +255,7 @@ module Make (Store : Irmin.S) (Info : INFO) (Remote : REMOTE) = struct
          method snapshot_impl req release_params =
            let open Ir.Snapshot in
            let branch =
-             Params.branch_get req
-             |> Irmin.Type.of_string Store.branch_t
-             |> unwrap
+             Params.branch_get req |> Codec.Branch.decode |> unwrap
            in
            release_params ();
            Service.return_lwt (fun () ->
@@ -299,7 +265,7 @@ module Make (Store : Irmin.S) (Info : INFO) (Remote : REMOTE) = struct
                in
                Store.Head.find t >>= function
                | Some commit ->
-                   let s = Irmin.Type.to_string Store.Hash.t in
+                   let s = Codec.Hash.encode in
                    Results.result_set results (Store.Commit.hash commit |> s);
                    Lwt.return_ok resp
                | None ->
@@ -309,13 +275,9 @@ module Make (Store : Irmin.S) (Info : INFO) (Remote : REMOTE) = struct
          method revert_impl req release_params =
            let open Ir.Revert in
            let branch =
-             Params.branch_get req
-             |> Irmin.Type.of_string Store.branch_t
-             |> unwrap
+             Params.branch_get req |> Codec.Branch.decode |> unwrap
            in
-           let commit =
-             Params.hash_get req |> Irmin.Type.of_string Store.Hash.t |> unwrap
-           in
+           let commit = Params.hash_get req |> Codec.Hash.decode |> unwrap in
            release_params ();
            Service.return_lwt (fun () ->
                let resp, results =
@@ -339,11 +301,7 @@ module Make (Store : Irmin.S) (Info : INFO) (Remote : REMOTE) = struct
                  Service.Response.create Results.init_pointer
                in
                Store.Branch.list ctx >>= fun branches ->
-               let l =
-                 List.map
-                   (fun x -> Irmin.Type.to_string Store.branch_t x)
-                   branches
-               in
+               let l = List.map Codec.Branch.encode branches in
                let (_
                      : ( Irmin_api.rw,
                          string,
@@ -355,9 +313,7 @@ module Make (Store : Irmin.S) (Info : INFO) (Remote : REMOTE) = struct
 
          method commit_history_impl req release_params =
            let open Ir.CommitHistory in
-           let commit =
-             Params.hash_get req |> Irmin.Type.of_string Store.Hash.t |> unwrap
-           in
+           let commit = Params.hash_get req |> Codec.Hash.decode |> unwrap in
            release_params ();
            Service.return_lwt (fun () ->
                let resp, results =
@@ -367,8 +323,7 @@ module Make (Store : Irmin.S) (Info : INFO) (Remote : REMOTE) = struct
                  let l =
                    match commit with
                    | Some commit ->
-                       Store.Commit.parents commit
-                       |> List.map (Irmin.Type.to_string Store.Hash.t)
+                       Store.Commit.parents commit |> List.map Codec.Hash.encode
                    | None -> []
                  in
                  let (_
@@ -384,9 +339,7 @@ module Make (Store : Irmin.S) (Info : INFO) (Remote : REMOTE) = struct
          method remove_branch_impl req release_params =
            let open Ir.RemoveBranch in
            let branch =
-             Params.branch_get req
-             |> Irmin.Type.of_string Store.branch_t
-             |> unwrap
+             Params.branch_get req |> Codec.Branch.decode |> unwrap
            in
            release_params ();
            Service.return_lwt (fun () ->
@@ -398,14 +351,8 @@ module Make (Store : Irmin.S) (Info : INFO) (Remote : REMOTE) = struct
 
          method create_branch_impl req release_params =
            let open Ir.CreateBranch in
-           let branch =
-             Params.branch_get req
-             |> Irmin.Type.of_string Store.branch_t
-             |> unwrap
-           in
-           let commit =
-             Params.hash_get req |> Irmin.Type.of_string Store.Hash.t |> unwrap
-           in
+           let branch = Params.branch_get req |> Codec.Branch.decode |> unwrap
+           and commit = Params.hash_get req |> Codec.Hash.decode |> unwrap in
            release_params ();
            Service.return_lwt (fun () ->
                let resp, _results =

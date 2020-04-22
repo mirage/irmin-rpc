@@ -5,7 +5,40 @@ exception Error_message of string
 
 let unwrap = function Ok x -> x | Error (`Msg m) -> raise (Error_message m)
 
+let codec_of_type (type a) (t : a Irmin.Type.t) =
+  let encode = Irmin.Type.to_string t
+  and decode s =
+    ( Irmin.Type.of_string t s
+      : (a, [ `Msg of _ ]) result
+      :> (a, [> `Msg of _ ]) result )
+  in
+  (encode, decode)
+
 module Make (Store : Irmin.S) = struct
+  module Branch = struct
+    type t = Store.branch
+
+    let encode, decode = codec_of_type Store.Branch.t
+  end
+
+  module Key = struct
+    type t = Store.key
+
+    let encode, decode = codec_of_type Store.Key.t
+  end
+
+  module Hash = struct
+    type t = Store.hash
+
+    let encode, decode = codec_of_type Store.Hash.t
+  end
+
+  module Contents = struct
+    type t = Store.contents
+
+    let encode, decode = codec_of_type Store.Contents.t
+  end
+
   let rec encode_tree tr key (tree : Store.tree) : unit Lwt.t =
     let module Tree = Raw.Builder.Irmin.Tree in
     let module Node = Raw.Builder.Irmin.Node in
