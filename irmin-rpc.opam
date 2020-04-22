@@ -1,23 +1,24 @@
 opam-version: "2.0"
 maintainer: "Zach Shipko <zachshipko@gmail.com>"
 authors: ["Zach Shipko <zachshipko@gmail.com>"]
+license: "ISC"
 homepage: "https://github.com/mirage/irmin-rpc"
 doc: "https://mirage.github.io/irmin-rpc/doc"
-license: "ISC"
 dev-repo: "git://github.com:mirage/irmin-rpc"
 bug-reports: "https://github.com/mirage/irmin-rpc/issues"
 
+build: [
+  ["dune" "subst"] {pinned}
+  ["dune" "build" "-p" name "-j" jobs]
+  ["dune" "runtest" "-p" name] {with-test}
+]
+
 depends:
 [
-    "ocaml" {>= "4.08.0"}
-    "dune" {>= "2.5.0"}
-    "irmin"
-    "capnp-rpc-lwt"
+  "ocaml" {>= "4.08.0"}
+  "dune" {>= "2.0.0"}
+  "irmin"
+  "capnp-rpc-lwt"
 ]
 
-depopts: []
-
-build:
-[
-    ["dune" "build" "-p" name "-j" jobs]
-]
+synopsis: "Cap'n Proto RPC client/server for Irmin"

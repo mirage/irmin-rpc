@@ -1,3 +1,3 @@
-(lang dune 2.5)
+(lang dune 2.0)
 (name irmin_rpc)
 
