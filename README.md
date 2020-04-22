@@ -1,5 +1,7 @@
 ## irmin-rpc — Cap'N'Proto RPC server for Irmin
 
+[![OCaml-CI Build Status](https://img.shields.io/endpoint?url=https%3A%2F%2Fci.ocamllabs.io%2Fbadge%2Fmirage%2Firmin-rpc%2Fmaster&logo=ocaml)](https://ci.ocamllabs.io/github/mirage/irmin-rpc)
+
 %%VERSION%%
 
 `irmin-rpc` is a Cap'N'Proto RPC server and client for Irmin. It allows for
