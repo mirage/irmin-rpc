@@ -18,6 +18,7 @@ Homepage: https://github.com/mirage/irmin-rpc
 
 ```shell
 $ opam pin add irmin-rpc https://github.com/mirage/irmin-rpc.git
+$ opam install irmin-rpc
 ```
 
 After that, you will most likely want to install `irmin-rpc-unix` (or
@@ -25,6 +26,7 @@ After that, you will most likely want to install `irmin-rpc-unix` (or
 
 ```shell
 $ opam pin add irmin-rpc-unix https://github.com/mirage/irmin-rpc.git
+$ opam install irmin-rpc-unix
 ```
 
 This will also install a tool named `irmin-rpc` which can be used to run an RPC
