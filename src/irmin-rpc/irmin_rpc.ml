@@ -7,6 +7,13 @@ exception Error_message of string
 
 let unwrap = function Ok x -> x | Error (`Msg m) -> raise (Error_message m)
 
+let error m =
+  let err = Capnp_rpc.Exception.v ~ty:`Failed m in
+  Error (`Capnp (`Exception err))
+
+let ignore_result_set r =
+  ignore (r : (Irmin_api.rw, string, Raw.Reader.builder_array_t) Capnp.Array.t)
+
 module Make (Store : Irmin.S) (Info : INFO) (Remote : REMOTE) = struct
   module Store = Store
   module Sync = Irmin.Sync (Store)
@@ -30,11 +37,12 @@ module Make (Store : Irmin.S) (Info : INFO) (Remote : REMOTE) = struct
                  Service.Response.create Results.init_pointer
                in
                Store.of_branch ctx branch >>= fun t ->
-               Store.find t key >>= function
-               | Some value ->
-                   Results.result_set results (Codec.Contents.encode value);
-                   Lwt.return_ok resp
-               | None -> Lwt.return_ok resp)
+               Store.find t key >|= fun v ->
+               Option.iter
+                 (fun value ->
+                   Codec.Contents.encode value |> Results.result_set results)
+                 v;
+               Ok resp)
 
          method set_impl req release_params =
            let open Ir.Set in
@@ -49,24 +57,18 @@ module Make (Store : Irmin.S) (Info : INFO) (Remote : REMOTE) = struct
                  Service.Response.create Results.init_pointer
                in
                Store.of_branch ctx branch >>= fun t ->
-               match Codec.Contents.decode value with
-               | Ok value -> (
-                   Store.set_exn t key value
-                     ~info:(Info.info ~author "%s" message)
-                   >>= fun () ->
-                   Store.Head.find t >>= function
-                   | Some head ->
-                       let commit = Results.result_init results in
-                       Codec.encode_commit commit head >>= fun () ->
-                       Lwt.return_ok resp
-                   | None ->
-                       let err =
-                         Capnp_rpc.Exception.v ~ty:`Failed "Unable to set key"
-                       in
-                       Lwt.return_error (`Capnp (`Exception err)) )
-               | Error (`Msg m) ->
-                   let err = Capnp_rpc.Exception.v ~ty:`Failed m in
-                   Lwt.return_error (`Capnp (`Exception err)))
+               Codec.Contents.decode value
+               |> Result.fold
+                    ~error:(fun (`Msg m) -> error m |> Lwt.return)
+                    ~ok:(fun value ->
+                      Store.set_exn t key value
+                        ~info:(Info.info ~author "%s" message)
+                      >>= fun () ->
+                      Store.Head.find t >>= function
+                      | None -> error "Unable to set key" |> Lwt.return
+                      | Some head ->
+                          let commit = Results.result_init results in
+                          Codec.encode_commit commit head >|= fun () -> Ok resp))
 
          method remove_impl req release_params =
            let open Ir.Remove in
@@ -148,9 +150,7 @@ module Make (Store : Irmin.S) (Info : INFO) (Remote : REMOTE) = struct
                    Codec.encode_commit commit head >>= fun () ->
                    Lwt.return_ok resp
                | Ok `Empty -> Lwt.return_ok resp
-               | Error (`Msg s) ->
-                   let err = Capnp_rpc.Exception.v ~ty:`Failed s in
-                   Lwt.return_error (`Capnp (`Exception err)))
+               | Error (`Msg s) -> Lwt.return (error s))
 
          method push_impl req release_params =
            let open Ir.Push in
@@ -167,11 +167,9 @@ module Make (Store : Irmin.S) (Info : INFO) (Remote : REMOTE) = struct
                Sync.push t remote >>= function
                | Ok _ -> Lwt.return_ok resp
                | Error err ->
-                   let err =
-                     Fmt.to_to_string Sync.pp_push_error err
-                     |> Capnp_rpc.Exception.v ~ty:`Failed
-                   in
-                   Lwt.return_error (`Capnp (`Exception err)))
+                   Fmt.to_to_string Sync.pp_push_error err
+                   |> error
+                   |> Lwt.return)
 
          method pull_impl req release_params =
            let open Ir.Pull in
@@ -189,23 +187,16 @@ module Make (Store : Irmin.S) (Info : INFO) (Remote : REMOTE) = struct
                Sync.pull t remote info >>= function
                | Ok (`Head head) ->
                    let commit = Results.result_init results in
-                   Codec.encode_commit commit head >>= fun () ->
-                   Lwt.return_ok resp
-               | Ok `Empty ->
-                   let err = Capnp_rpc.Exception.v ~ty:`Failed "No head" in
-                   Lwt.return_error (`Capnp (`Exception err))
-               | Error (`Msg message) ->
-                   let err = Capnp_rpc.Exception.v ~ty:`Failed message in
-                   Lwt.return_error (`Capnp (`Exception err))
-               | Error (`Conflict _) ->
-                   let err = Capnp_rpc.Exception.v ~ty:`Failed "Conflict" in
-                   Lwt.return_error (`Capnp (`Exception err)))
+                   Codec.encode_commit commit head >|= fun () -> Ok resp
+               | Ok `Empty -> error "No head" |> Lwt.return
+               | Error (`Msg message) -> error message |> Lwt.return
+               | Error (`Conflict _) -> error "Conflict" |> Lwt.return)
 
          method merge_impl req release_params =
            let open Ir.Merge in
-           let from_ =
+           let from =
              Params.branch_from_get req |> Codec.Branch.decode |> unwrap
-           and into_ =
+           and into =
              Params.branch_into_get req |> Codec.Branch.decode |> unwrap
            and message = Params.message_get req
            and author = Params.author_get req in
@@ -215,22 +206,19 @@ module Make (Store : Irmin.S) (Info : INFO) (Remote : REMOTE) = struct
                let resp, results =
                  Service.Response.create Results.init_pointer
                in
-               Store.of_branch ctx into_ >>= fun t ->
-               Store.merge_with_branch t from_ ~info >>= fun res ->
-               match res with
-               | Ok () ->
-                   Store.Head.get t >>= fun head ->
-                   let commit = Results.result_init results in
-                   Codec.encode_commit commit head >>= fun () ->
-                   Lwt.return_ok resp
-               | Error e ->
-                   let msg =
-                     Fmt.to_to_string
-                       (Irmin.Type.pp_json Irmin.Merge.conflict_t)
-                       e
-                   in
-                   let err = Capnp_rpc.Exception.v ~ty:`Failed msg in
-                   Lwt.return_error (`Capnp (`Exception err)))
+               Store.of_branch ctx into >>= fun t ->
+               Store.merge_with_branch t from ~info
+               >>= Result.fold
+                     ~error:(fun e ->
+                       Fmt.to_to_string
+                         (Irmin.Type.pp_json Irmin.Merge.conflict_t)
+                         e
+                       |> error
+                       |> Lwt.return)
+                     ~ok:(fun () ->
+                       Store.Head.get t >>= fun head ->
+                       let commit = Results.result_init results in
+                       Codec.encode_commit commit head >|= fun () -> Ok resp))
 
          method commit_info_impl req release_params =
            let open Ir.CommitInfo in
@@ -241,16 +229,12 @@ module Make (Store : Irmin.S) (Info : INFO) (Remote : REMOTE) = struct
                  Service.Response.create Results.init_pointer
                in
                let hash = Codec.Hash.decode hash |> unwrap in
-               Store.Commit.of_hash ctx hash >>= function
-               | Some c ->
-                   let info = Results.result_init results in
-                   Codec.encode_commit_info c info;
-                   Lwt.return_ok resp
-               | None ->
-                   let err =
-                     Capnp_rpc.Exception.v ~ty:`Failed "Invalid commit"
-                   in
-                   Lwt.return_error (`Capnp (`Exception err)))
+               Store.Commit.of_hash ctx hash
+               >|= Option.fold ~none:(error "Invalid commit")
+                     ~some:(fun commit ->
+                       Results.result_init results
+                       |> Codec.encode_commit_info commit;
+                       Ok resp))
 
          method snapshot_impl req release_params =
            let open Ir.Snapshot in
@@ -263,14 +247,12 @@ module Make (Store : Irmin.S) (Info : INFO) (Remote : REMOTE) = struct
                let resp, results =
                  Service.Response.create Results.init_pointer
                in
-               Store.Head.find t >>= function
-               | Some commit ->
-                   let s = Codec.Hash.encode in
-                   Results.result_set results (Store.Commit.hash commit |> s);
-                   Lwt.return_ok resp
-               | None ->
-                   let err = Capnp_rpc.Exception.v ~ty:`Failed "No head" in
-                   Lwt.return_error (`Capnp (`Exception err)))
+               Store.Head.find t
+               >|= Option.fold ~none:(error "No head") ~some:(fun commit ->
+                       Store.Commit.hash commit
+                       |> Codec.Hash.encode
+                       |> Results.result_set results;
+                       Ok resp))
 
          method revert_impl req release_params =
            let open Ir.Revert in
@@ -284,14 +266,12 @@ module Make (Store : Irmin.S) (Info : INFO) (Remote : REMOTE) = struct
                  Service.Response.create Results.init_pointer
                in
                Store.of_branch ctx branch >>= fun t ->
-               (Store.Commit.of_hash ctx commit >>= function
-                | Some commit ->
-                    Store.Head.set t commit >|= fun () ->
-                    Results.result_set results true
-                | None ->
-                    Results.result_set results false;
-                    Lwt.return_unit)
-               >>= fun () -> Lwt.return_ok resp)
+               Store.Commit.of_hash ctx commit
+               >>= Option.fold ~none:Lwt.return_false ~some:(fun c ->
+                       Store.Head.set t c >|= fun () -> true)
+               >|= fun b ->
+               Results.result_set results b;
+               Ok resp)
 
          method branches_impl _req release_params =
            let open Ir.Branches in
@@ -300,16 +280,11 @@ module Make (Store : Irmin.S) (Info : INFO) (Remote : REMOTE) = struct
                let resp, results =
                  Service.Response.create Results.init_pointer
                in
-               Store.Branch.list ctx >>= fun branches ->
-               let l = List.map Codec.Branch.encode branches in
-               let (_
-                     : ( Irmin_api.rw,
-                         string,
-                         Raw.Reader.builder_array_t )
-                       Capnp.Array.t) =
-                 Results.result_set_list results l
-               in
-               Lwt.return_ok resp)
+               Store.Branch.list ctx >|= fun branches ->
+               List.map Codec.Branch.encode branches
+               |> Results.result_set_list results
+               |> ignore_result_set;
+               Ok resp)
 
          method commit_history_impl req release_params =
            let open Ir.CommitHistory in
@@ -319,22 +294,12 @@ module Make (Store : Irmin.S) (Info : INFO) (Remote : REMOTE) = struct
                let resp, results =
                  Service.Response.create Results.init_pointer
                in
-               ( Store.Commit.of_hash ctx commit >>= fun commit ->
-                 let l =
-                   match commit with
-                   | Some commit ->
-                       Store.Commit.parents commit |> List.map Codec.Hash.encode
-                   | None -> []
-                 in
-                 let (_
-                       : ( Irmin_api.rw,
-                           string,
-                           Raw.Reader.builder_array_t )
-                         Capnp.Array.t) =
-                   Results.result_set_list results l
-                 in
-                 Lwt.return_unit )
-               >>= fun () -> Lwt.return_ok resp)
+               Store.Commit.of_hash ctx commit >|= fun commit ->
+               Option.fold ~none:[] ~some:Store.Commit.parents commit
+               |> List.map Codec.Hash.encode
+               |> Results.result_set_list results
+               |> ignore_result_set;
+               Ok resp)
 
          method remove_branch_impl req release_params =
            let open Ir.RemoveBranch in
@@ -343,11 +308,10 @@ module Make (Store : Irmin.S) (Info : INFO) (Remote : REMOTE) = struct
            in
            release_params ();
            Service.return_lwt (fun () ->
-               Store.Branch.remove ctx branch >>= fun () ->
                let resp, _results =
                  Service.Response.create Results.init_pointer
                in
-               Lwt.return_ok resp)
+               Store.Branch.remove ctx branch >|= fun () -> Ok resp)
 
          method create_branch_impl req release_params =
            let open Ir.CreateBranch in
@@ -358,14 +322,10 @@ module Make (Store : Irmin.S) (Info : INFO) (Remote : REMOTE) = struct
                let resp, _results =
                  Service.Response.create Results.init_pointer
                in
-               Store.Commit.of_hash ctx commit >>= function
-               | Some commit ->
-                   Store.Branch.set ctx branch commit >>= fun () ->
-                   Lwt.return_ok resp
-               | None ->
-                   let err =
-                     Capnp_rpc.Exception.v ~ty:`Failed "Invalid commit"
-                   in
-                   Lwt.return_error (`Capnp (`Exception err)))
+               Store.Commit.of_hash ctx commit
+               >>= Option.fold
+                     ~none:(error "Invalid commit" |> Lwt.return)
+                     ~some:(fun c ->
+                       Store.Branch.set ctx branch c >|= fun () -> Ok resp))
        end
 end
