@@ -6,20 +6,20 @@ irmin-rpc — Cap'N'Proto RPC server for Irmin
 
 `irmin-rpc` is distributed under the ISC license.
 
-Homepage: https://github.com/zshipko/irmin-rpc
+Homepage: https://github.com/mirage/irmin-rpc
 
 ## Installation
 
 `irmin-rpc` can be installed with `opam`:
 
 ```shell
-$ opam pin add irmin-rpc https://github.com/zshipko/irmin-rpc.git
+$ opam pin add irmin-rpc https://github.com/mirage/irmin-rpc.git
 ```
 
 After that, you will most likely want to install `irmin-rpc-unix` or (`irmin-rpc-mirage`):
 
 ```shell
-$ opam pin add irmin-rpc-unix https://github.com/zshipko/irmin-rpc.git
+$ opam pin add irmin-rpc-unix https://github.com/mirage/irmin-rpc.git
 ```
 
 This will also install a tool named `irmin-rpc` which can be used to run an RPC server from the command line! All that's needed to get an RPC server running is:
@@ -84,7 +84,7 @@ The documentation and API reference is generated from the source
 interfaces. It can be consulted [online][doc] or via `odig doc
 irmin-rpc`.
 
-[doc]: https://zshipko.github.io/irmin-rpc/doc
+[doc]: https://mirage.github.io/irmin-rpc/doc
 
 ## Tests
 

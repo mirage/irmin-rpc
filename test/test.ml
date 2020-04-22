@@ -87,7 +87,7 @@ let test_set_tree t _switch () =
    not [dune runtest] *)
 let test_pull t _switch () =
   Rpc.Client.Sync.pull t ~author ~message
-    "git://github.com/zshipko/irmin-rpc.git"
+    "git://github.com/mirage/irmin-rpc.git"
   >>= function
   | Ok _hash ->
       Rpc.Client.get t [ "README.md" ] >|= fun readme ->
