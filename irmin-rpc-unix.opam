@@ -1,11 +1,11 @@
 opam-version: "2.0"
 maintainer: "Zach Shipko <zachshipko@gmail.com>"
 authors: ["Zach Shipko <zachshipko@gmail.com>"]
-homepage: "https://github.com/zshipko/irmin-rpc"
-doc: "https://zshipko.github.io/irmin-rpc/doc"
+homepage: "https://github.com/mirage/irmin-rpc"
+doc: "https://mirage.github.io/irmin-rpc/doc"
 license: "ISC"
-dev-repo: "git://github.com:zshipko/irmin-rpc"
-bug-reports: "https://github.com/zshipko/irmin-rpc/issues"
+dev-repo: "git://github.com:mirage/irmin-rpc"
+bug-reports: "https://github.com/mirage/irmin-rpc/issues"
 tags: []
 
 depends:
