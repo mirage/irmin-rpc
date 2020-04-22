@@ -6,9 +6,9 @@ exception Error_message of string
 
 let unwrap = function Ok x -> x | Error (`Msg m) -> raise (Error_message m)
 
-let some x = Some x
-
-let ok x = Ok x
+let error (`Capnp err) =
+  let s = Fmt.to_to_string Capnp_rpc.Error.pp err in
+  Error (`Msg s)
 
 module Make (Store : Irmin.S) = struct
   module Store = Store
@@ -18,21 +18,16 @@ module Make (Store : Irmin.S) = struct
   type t = capability
 
   let branch_param branch_set p branch =
-    match branch with
-    | Some br ->
-        let br = Codec.Branch.encode br in
-        branch_set p br
-    | None -> branch_set p "master"
+    Option.fold ~some:Codec.Branch.encode ~none:"master" branch |> branch_set p
 
   let find t ?branch key =
     let open Ir.Find in
     let req, p = Capability.Request.create Params.init_pointer in
     branch_param Params.branch_set p branch;
-    let key_s = Codec.Key.encode key in
-    Params.key_set p key_s;
+    Codec.Key.encode key |> Params.key_set p;
     Capability.call_for_value_exn t method_id req >|= fun res ->
     if Results.has_result res then
-      res |> Results.result_get |> Codec.Contents.decode |> unwrap |> some
+      Some (Results.result_get res |> Codec.Contents.decode |> unwrap)
     else None
 
   let get t ?branch key =
@@ -46,13 +41,14 @@ module Make (Store : Irmin.S) = struct
     branch_param Params.branch_set p branch;
     Params.author_set p author;
     Params.message_set p message;
-    let key_s = Codec.Key.encode key in
-    Params.key_set p key_s;
-    Params.value_set p (Codec.Contents.encode value);
+    Codec.Key.encode key |> Params.key_set p;
+    Codec.Contents.encode value |> Params.value_set p;
     Capability.call_for_value_exn t method_id req >|= fun res ->
     if Results.has_result res then
-      let commit = Results.result_get res in
-      Raw.Reader.Irmin.Commit.hash_get commit |> Codec.Hash.decode |> unwrap
+      Results.result_get res
+      |> Raw.Reader.Irmin.Commit.hash_get
+      |> Codec.Hash.decode
+      |> unwrap
     else raise (Error_message "Unable to set key")
 
   let remove t ?branch ~author ~message key =
@@ -61,31 +57,27 @@ module Make (Store : Irmin.S) = struct
     branch_param Params.branch_set p branch;
     Params.author_set p author;
     Params.message_set p message;
-    let key_s = Codec.Key.encode key in
-    Params.key_set p key_s;
+    Codec.Key.encode key |> Params.key_set p;
     Capability.call_for_value_exn t method_id req >|= fun res ->
-    let commit = Results.result_get res in
-    Raw.Reader.Irmin.Commit.hash_get commit |> Codec.Hash.decode |> unwrap
+    Results.result_get res
+    |> Raw.Reader.Irmin.Commit.hash_get
+    |> Codec.Hash.decode
+    |> unwrap
 
-  let merge t ?branch ~author ~message from_ =
+  let merge t ?branch ~author ~message from =
     let open Ir.Merge in
     let req, p = Capability.Request.create Params.init_pointer in
     branch_param Params.branch_into_set p branch;
-    let from_ = Codec.Branch.encode from_ in
-    Params.branch_from_set p from_;
+    Codec.Branch.encode from |> Params.branch_from_set p;
     Params.author_set p author;
     Params.message_set p message;
-    Capability.call_for_value t method_id req >|= fun res ->
-    match res with
-    | Ok res ->
-        let commit = Results.result_get res in
-        Raw.Reader.Irmin.Commit.hash_get commit
-        |> Codec.Hash.decode
-        |> unwrap
-        |> ok
-    | Error (`Capnp err) ->
-        let err = Fmt.to_to_string Capnp_rpc.Error.pp err in
-        Error (`Msg err)
+    Capability.call_for_value t method_id req
+    >|= Result.fold ~error ~ok:(fun res ->
+            Results.result_get res
+            |> Raw.Reader.Irmin.Commit.hash_get
+            |> Codec.Hash.decode
+            |> unwrap
+            |> Result.ok)
 
   let snapshot ?branch t =
     let open Ir.Snapshot in
@@ -93,8 +85,7 @@ module Make (Store : Irmin.S) = struct
     branch_param Params.branch_set p branch;
     Capability.call_for_value_exn t method_id req >|= fun res ->
     if Results.has_result res then
-      let commit = Results.result_get res in
-      Codec.Hash.decode commit |> unwrap |> some
+      Some (Results.result_get res |> Codec.Hash.decode |> unwrap)
     else None
 
   let revert t ?branch hash =
@@ -112,20 +103,20 @@ module Make (Store : Irmin.S) = struct
       branch_param Params.branch_set p branch;
       Params.author_set p author;
       Params.message_set p message;
-      let key_s = Codec.Key.encode key in
-      Params.key_set p key_s;
+      Codec.Key.encode key |> Params.key_set p;
       let tr = Params.tree_init p in
       Codec.encode_tree tr key tree >>= fun () ->
       Capability.call_for_value_exn t method_id req >|= fun res ->
-      let commit = Results.result_get res in
-      Raw.Reader.Irmin.Commit.hash_get commit |> Codec.Hash.decode |> unwrap
+      Results.result_get res
+      |> Raw.Reader.Irmin.Commit.hash_get
+      |> Codec.Hash.decode
+      |> unwrap
 
     let find t ?branch key =
       let open Ir.FindTree in
       let req, p = Capability.Request.create Params.init_pointer in
       branch_param Params.branch_set p branch;
-      let key_s = Codec.Key.encode key in
-      Params.key_set p key_s;
+      Codec.Key.encode key |> Params.key_set p;
       Capability.call_for_value_exn t method_id req >|= fun res ->
       if Results.has_result res then
         Some
@@ -144,16 +135,13 @@ module Make (Store : Irmin.S) = struct
       let req, p = Capability.Request.create Params.init_pointer in
       branch_param Params.branch_set p branch;
       Params.remote_set p remote;
-      Capability.call_for_value t method_id req >|= function
-      | Ok res ->
-          let commit = Results.result_get res in
-          Raw.Reader.Irmin.Commit.hash_get commit
-          |> Codec.Hash.decode
-          |> unwrap
-          |> ok
-      | Error (`Capnp err) ->
-          let s = Fmt.to_to_string Capnp_rpc.Error.pp err in
-          Error (`Msg s)
+      Capability.call_for_value t method_id req
+      >|= Result.fold ~error ~ok:(fun res ->
+              Results.result_get res
+              |> Raw.Reader.Irmin.Commit.hash_get
+              |> Codec.Hash.decode
+              |> unwrap
+              |> Result.ok)
 
     let pull t ?branch ~author ~message remote =
       let open Ir.Pull in
@@ -162,16 +150,13 @@ module Make (Store : Irmin.S) = struct
       Params.author_set p author;
       Params.message_set p message;
       Params.remote_set p remote;
-      Capability.call_for_value t method_id req >|= function
-      | Ok res ->
-          let commit = Results.result_get res in
-          Raw.Reader.Irmin.Commit.hash_get commit
-          |> Codec.Hash.decode
-          |> unwrap
-          |> ok
-      | Error (`Capnp err) ->
-          let s = Fmt.to_to_string Capnp_rpc.Error.pp err in
-          Error (`Msg s)
+      Capability.call_for_value t method_id req
+      >|= Result.fold ~error ~ok:(fun res ->
+              Results.result_get res
+              |> Raw.Reader.Irmin.Commit.hash_get
+              |> Codec.Hash.decode
+              |> unwrap
+              |> Result.ok)
 
     let push t ?branch remote =
       let open Ir.Push in
@@ -180,9 +165,7 @@ module Make (Store : Irmin.S) = struct
       Params.remote_set p remote;
       Capability.call_for_unit t method_id req >|= function
       | Ok () -> Ok ()
-      | Error (`Capnp err) ->
-          let s = Fmt.to_to_string Capnp_rpc.Error.pp err in
-          Error (`Msg s)
+      | Error e -> error e
   end
 
   module Commit = struct
@@ -204,14 +187,9 @@ module Make (Store : Irmin.S) = struct
       let open Ir.CommitHistory in
       let req, p = Capability.Request.create Params.init_pointer in
       Params.hash_set p (Codec.Hash.encode hash);
-      Capability.call_for_value_exn t method_id req >>= fun res ->
-      let l = Results.result_get_list res in
-      Lwt_list.filter_map_s
-        (fun x ->
-          match Codec.Hash.decode x with
-          | Ok b -> Lwt.return_some b
-          | Error _ -> Lwt.return_none)
-        l
+      Capability.call_for_value_exn t method_id req >|= fun res ->
+      Results.result_get_list res
+      |> List.filter_map (fun x -> Codec.Hash.decode x |> Result.to_option)
   end
 
   module Branch = struct
@@ -231,13 +209,8 @@ module Make (Store : Irmin.S) = struct
     let list t =
       let open Ir.Branches in
       let req, _ = Capability.Request.create Params.init_pointer in
-      Capability.call_for_value_exn t method_id req >>= fun res ->
-      let l = Results.result_get_list res in
-      Lwt_list.filter_map_s
-        (fun x ->
-          match Codec.Branch.decode x with
-          | Ok b -> Lwt.return_some b
-          | Error _ -> Lwt.return_none)
-        l
+      Capability.call_for_value_exn t method_id req >|= fun res ->
+      Results.result_get_list res
+      |> List.filter_map (fun x -> Codec.Branch.decode x |> Result.to_option)
   end
 end
