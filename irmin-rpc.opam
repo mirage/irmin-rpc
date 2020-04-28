@@ -17,8 +17,15 @@ depends:
 [
   "ocaml" {>= "4.08.0"}
   "dune" {>= "2.0.0"}
-  "irmin"
+  "capnp"
+  "capnp-rpc"
   "capnp-rpc-lwt"
+  "cohttp"
+  "fmt"
+  "irmin" {>= "2.0.0"}
+  "lwt"
+  "result" {>= "1.5"}
+  "stdint"
 ]
 
 synopsis: "Cap'n Proto RPC client/server for Irmin"

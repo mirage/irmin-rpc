@@ -1,3 +1,2 @@
 (lang dune 2.0)
-(name irmin_rpc)
-
+(name irmin-rpc)
