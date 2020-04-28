@@ -22,7 +22,7 @@ depends:
   "capnp-rpc-lwt"
   "cohttp"
   "fmt"
-  "irmin"
+  "irmin" {>= "2.0.0"}
   "lwt"
   "result" {>= "1.5"}
   "stdint"
