@@ -17,9 +17,15 @@ depends:
 [
   "ocaml" {>= "4.08.0"}
   "dune" {>= "2.0.0"}
+  "capnp-rpc"
+  "capnp-rpc-lwt"
+  "capnp-rpc-unix"
+  "capnp-rpc-net"
+  "irmin"
   "irmin-rpc"
   "irmin-unix"
-  "capnp-rpc-unix"
+  "lwt"
+  "uri"
   "alcotest-lwt" {with-test & >= "1.1.0"}
 ]
 
