@@ -10,12 +10,18 @@ let error (`Capnp err) =
   let s = Fmt.to_to_string Capnp_rpc.Error.pp err in
   Error (`Msg s)
 
-module Make (Store : Irmin.S) = struct
+module Make
+    (Store : Irmin.S)
+    (Endpoint_codec : Codec.SERIALISABLE
+                        with type t = Store.Private.Sync.endpoint) =
+struct
   module Store = Store
   module Ir = Raw.Client.Irmin
   module Codec = Codec.Make (Store)
 
   type t = capability
+
+  type endpoint = Store.Private.Sync.endpoint
 
   let branch_param branch_set p branch =
     Option.fold ~some:Codec.Branch.encode ~none:"master" branch |> branch_set p
@@ -130,11 +136,11 @@ module Make (Store : Irmin.S) = struct
   end
 
   module Sync = struct
-    let clone t ?branch remote =
+    let clone t ?branch endpoint =
       let open Ir.Clone in
       let req, p = Capability.Request.create Params.init_pointer in
       branch_param Params.branch_set p branch;
-      Params.remote_set p remote;
+      endpoint |> Endpoint_codec.encode |> Params.endpoint_set p;
       Capability.call_for_value t method_id req
       >|= Result.fold ~error ~ok:(fun res ->
               Results.result_get res
@@ -143,13 +149,13 @@ module Make (Store : Irmin.S) = struct
               |> unwrap
               |> Result.ok)
 
-    let pull t ?branch ~author ~message remote =
+    let pull t ?branch ~author ~message endpoint =
       let open Ir.Pull in
       let req, p = Capability.Request.create Params.init_pointer in
       branch_param Params.branch_set p branch;
       Params.author_set p author;
       Params.message_set p message;
-      Params.remote_set p remote;
+      endpoint |> Endpoint_codec.encode |> Params.endpoint_set p;
       Capability.call_for_value t method_id req
       >|= Result.fold ~error ~ok:(fun res ->
               Results.result_get res
@@ -158,11 +164,11 @@ module Make (Store : Irmin.S) = struct
               |> unwrap
               |> Result.ok)
 
-    let push t ?branch remote =
+    let push t ?branch endpoint =
       let open Ir.Push in
       let req, p = Capability.Request.create Params.init_pointer in
       branch_param Params.branch_set p branch;
-      Params.remote_set p remote;
+      endpoint |> Endpoint_codec.encode |> Params.endpoint_set p;
       Capability.call_for_unit t method_id req >|= function
       | Ok () -> Ok ()
       | Error e -> error e

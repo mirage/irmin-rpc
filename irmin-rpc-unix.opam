@@ -27,6 +27,7 @@ depends:
   "lwt"
   "uri"
   "alcotest-lwt" {with-test & >= "1.1.0"}
+  "sexplib0" {with-test}
 ]
 
 synopsis: "Cap'n Proto RPC client/server for Irmin"

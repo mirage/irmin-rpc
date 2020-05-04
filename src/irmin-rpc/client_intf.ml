@@ -5,6 +5,8 @@ module type S = sig
 
   type t = capability
 
+  type endpoint = Store.Private.Sync.endpoint
+
   val get : t -> ?branch:Store.branch -> Store.key -> Store.contents Lwt.t
 
   val find :
@@ -58,7 +60,7 @@ module type S = sig
     val clone :
       t ->
       ?branch:Store.branch ->
-      string ->
+      endpoint ->
       (Store.Hash.t, [ `Msg of string ]) result Lwt.t
 
     val pull :
@@ -66,7 +68,7 @@ module type S = sig
       ?branch:Store.branch ->
       author:string ->
       message:string ->
-      string ->
+      endpoint ->
       (Store.Hash.t, [ `Msg of string ]) result Lwt.t
     (** [pull t ~branch ~author ~message remote] pulls from the given remote
         into the specified branch. A local merge commit is constructed using the
@@ -75,7 +77,7 @@ module type S = sig
     val push :
       t ->
       ?branch:Store.branch ->
-      string ->
+      endpoint ->
       (unit, [ `Msg of string ]) result Lwt.t
   end
 
@@ -97,5 +99,9 @@ end
 module type Client = sig
   module type S = S
 
-  module Make (Store : Irmin.S) : S with module Store = Store
+  module Make
+      (Store : Irmin.S)
+      (Endpoint_codec : Codec.SERIALISABLE
+                          with type t = Store.Private.Sync.endpoint) :
+    S with module Store = Store
 end
