@@ -26,7 +26,7 @@ let run host port (Irmin_unix.Resolver.S ((module Store), store, _)) secret_key
   in
   let p =
     store >>= fun store ->
-    Rpc.Server.create ~secret_key (`TCP (host, port)) (Store.repo store)
+    Rpc.Server.serve ~secret_key (`TCP (host, port)) (Store.repo store)
     >>= fun server ->
     let () =
       match address_file with
@@ -38,7 +38,7 @@ let run host port (Irmin_unix.Resolver.S ((module Store), store, _)) secret_key
           Printf.printf "Serving on: %s\n%!"
             (Uri.to_string (Rpc.Server.uri server))
     in
-    Rpc.Server.run server
+    fst (Lwt.wait ())
   in
   Lwt_main.run p
 
