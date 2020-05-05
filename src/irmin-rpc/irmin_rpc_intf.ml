@@ -1,9 +1,5 @@
 type t = Raw.Client.Irmin.t Capnp_rpc_lwt.Capability.t
 
-module type REMOTE = sig
-  val remote : ?headers:Cohttp.Header.t -> string -> Irmin.remote
-end
-
 module type INFO = sig
   val info :
     ?author:string -> ('a, Format.formatter, unit, Irmin.Info.f) format4 -> 'a
@@ -15,13 +11,14 @@ module type S = sig
   val local : Store.repo -> t
 end
 
-module type MAKER = functor (Store : Irmin.S) (_ : INFO) (_ : REMOTE) ->
-  S with module Store = Store
+module type MAKER = functor
+  (Store : Irmin.S)
+  (_ : INFO)
+  (Endpoint_codec : Codec.SERIALISABLE with type t = Store.Private.Sync.endpoint)
+  -> S with module Store = Store
 
 module type Irmin_rpc = sig
   type nonrec t = t
-
-  module type REMOTE = REMOTE
 
   module type INFO = INFO
 
@@ -32,4 +29,5 @@ module type Irmin_rpc = sig
   module Make : MAKER
 
   module Client = Client
+  module Codec = Codec
 end

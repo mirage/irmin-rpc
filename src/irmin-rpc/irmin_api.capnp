@@ -1,6 +1,7 @@
 @0x893d5c0632fd10a9;
 
 interface Irmin {
+
   struct Branch {
       name @0 :Text;
       head @1 :Commit;
@@ -42,9 +43,9 @@ interface Irmin {
   remove @2 (branch :Text, key :Text, author :Text, message :Text) -> (result :Commit);
   findTree @3 (branch :Text, key :Text) -> (result :Tree);
   setTree @4 (branch :Text, key :Text, tree :Tree, author :Text, message :Text) -> (result :Commit);
-  push @5 (branch :Text, remote :Text) -> ();
-  pull @6 (branch :Text, remote :Text, author :Text, message :Text) -> (result :Commit);
-  clone @7 (branch :Text, remote :Text) -> (result :Commit);
+  push @5 (branch :Text, endpoint :Data) -> ();
+  pull @6 (branch :Text, endpoint :Data, author :Text, message :Text) -> (result :Commit);
+  clone @7 (branch :Text, endpoint :Data) -> (result :Commit);
   merge @8 (branchFrom :Text, branchInto :Text, author :Text, message :Text) -> (result :Commit);
   commitInfo @9 (hash :Data) -> (result :Info);
   snapshot @10 (branch :Text) -> (result :Data);

@@ -2,6 +2,8 @@ open Lwt.Infix
 
 module Make
     (Store : Irmin.S)
+    (Endpoint_codec : Irmin_rpc.Codec.SERIALISABLE
+                        with type t = Store.Private.Sync.endpoint)
     (Random : Mirage_random.S)
     (Mclock : Mirage_clock.MCLOCK)
     (Pclock : Mirage_clock.PCLOCK)
@@ -18,13 +20,7 @@ struct
       let info ?(author = "irmin-rpc") = Info.f ~author
     end
 
-    module Remote = struct
-      type Irmin.remote += E of Git_mirage.endpoint
-
-      let remote ?headers s = E (Git_mirage.endpoint ?headers (Uri.of_string s))
-    end
-
-    module Rpc = Irmin_rpc.Make (Store) (Info) (Remote)
+    module Rpc = Irmin_rpc.Make (Store) (Info) (Endpoint_codec)
 
     type t = { uri : Uri.t }
 
@@ -47,7 +43,7 @@ struct
   end
 
   module Client = struct
-    include Irmin_rpc.Client.Make (Store)
+    include Irmin_rpc.Client.Make (Store) (Endpoint_codec)
 
     let connect stack uri =
       let dns = Dns.create stack in

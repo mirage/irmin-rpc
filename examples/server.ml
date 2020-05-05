@@ -1,12 +1,7 @@
 open Lwt.Infix
 module Store = Irmin_unix.Git.Mem.KV (Irmin.Contents.String)
-
 module Rpc =
-  Irmin_rpc_unix.Make
-    (Store)
-    (struct
-      let remote = Store.remote
-    end)
+  Irmin_rpc_unix.Make (Store) (Irmin_rpc_unix.Git_unix_endpoint_codec)
 
 let main =
   Store.Repo.v (Irmin_mem.config ()) >>= fun repo ->

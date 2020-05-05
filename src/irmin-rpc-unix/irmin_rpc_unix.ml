@@ -1,11 +1,34 @@
 open Lwt.Infix
 
-module Make (Store : Irmin.S) (Remote : Irmin_rpc.REMOTE) = struct
+module Git_unix_endpoint_codec = struct
+  type t = Git_unix.endpoint
+
+  let encode Git_unix.{ uri; headers } =
+    let open Sexplib0.Sexp_conv in
+    (Uri.to_string uri, headers)
+    |> sexp_of_pair sexp_of_string Cohttp.Header.sexp_of_t
+    |> Sexplib0.Sexp.to_string
+
+  let decode str =
+    let open Sexplib0.Sexp_conv in
+    let uri_string, headers =
+      str
+      |> Sexplib.Sexp.of_string
+      |> pair_of_sexp string_of_sexp Cohttp.Header.t_of_sexp
+    in
+    Ok Git_unix.{ uri = Uri.of_string uri_string; headers }
+end
+
+module Make
+    (Store : Irmin.S)
+    (Endpoint_codec : Irmin_rpc.Codec.SERIALISABLE
+                        with type t = Store.Private.Sync.endpoint) =
+struct
   module Info = struct
     let info = Irmin_unix.info
   end
 
-  module Rpc = Irmin_rpc.Make (Store) (Info) (Remote)
+  module Rpc = Irmin_rpc.Make (Store) (Info) (Endpoint_codec)
 
   module Server = struct
     type t = { uri : Uri.t }
@@ -25,7 +48,7 @@ module Make (Store : Irmin.S) (Remote : Irmin_rpc.REMOTE) = struct
   end
 
   module Client = struct
-    include Irmin_rpc.Client.Make (Store)
+    include Irmin_rpc.Client.Make (Store) (Endpoint_codec)
 
     let connect uri =
       let client_vat = Capnp_rpc_unix.client_only_vat () in

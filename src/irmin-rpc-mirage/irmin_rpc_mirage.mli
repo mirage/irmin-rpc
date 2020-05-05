@@ -1,5 +1,7 @@
 module Make
     (Store : Irmin.S)
+    (Endpoint_codec : Irmin_rpc.Codec.SERIALISABLE
+                        with type t = Store.Private.Sync.endpoint)
     (Random : Mirage_random.S)
     (Mclock : Mirage_clock.MCLOCK)
     (Pclock : Mirage_clock.PCLOCK)

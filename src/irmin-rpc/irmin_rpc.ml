@@ -2,6 +2,7 @@ include Irmin_rpc_intf
 open Lwt.Infix
 open Capnp_rpc_lwt
 module Client = Client
+module Codec = Codec
 
 exception Error_message of string
 
@@ -14,10 +15,17 @@ let error m =
 let ignore_result_set r =
   ignore (r : (Irmin_api.rw, string, Raw.Reader.builder_array_t) Capnp.Array.t)
 
-module Make (Store : Irmin.S) (Info : INFO) (Remote : REMOTE) = struct
+module Make
+    (Store : Irmin.S)
+    (Info : INFO)
+    (Endpoint_codec : Codec.SERIALISABLE
+                        with type t = Store.Private.Sync.endpoint) =
+struct
   module Store = Store
   module Sync = Irmin.Sync (Store)
   module Codec = Codec.Make (Store)
+
+  let remote_of_endpoint e = Store.E e
 
   let local ctx =
     let module Ir = Raw.Service.Irmin in
@@ -134,7 +142,9 @@ module Make (Store : Irmin.S) (Info : INFO) (Remote : REMOTE) = struct
 
          method clone_impl req release_params =
            let open Ir.Clone in
-           let remote = Params.remote_get req in
+           let endpoint =
+             Params.endpoint_get req |> Endpoint_codec.decode |> unwrap
+           in
            let branch =
              Params.branch_get req |> Codec.Branch.decode |> unwrap
            in
@@ -143,8 +153,9 @@ module Make (Store : Irmin.S) (Info : INFO) (Remote : REMOTE) = struct
                let resp, results =
                  Service.Response.create Results.init_pointer
                in
+               let remote = Store.E endpoint in
                Store.of_branch ctx branch >>= fun t ->
-               Sync.fetch t (Remote.remote remote) >>= function
+               Sync.fetch t remote >>= function
                | Ok (`Head head) ->
                    let commit = Results.result_init results in
                    Codec.encode_commit commit head >>= fun () ->
@@ -154,7 +165,11 @@ module Make (Store : Irmin.S) (Info : INFO) (Remote : REMOTE) = struct
 
          method push_impl req release_params =
            let open Ir.Push in
-           let remote = Params.remote_get req |> Remote.remote
+           let remote =
+             Params.endpoint_get req
+             |> Endpoint_codec.decode
+             |> unwrap
+             |> remote_of_endpoint
            and branch =
              Params.branch_get req |> Codec.Branch.decode |> unwrap
            in
@@ -173,7 +188,11 @@ module Make (Store : Irmin.S) (Info : INFO) (Remote : REMOTE) = struct
 
          method pull_impl req release_params =
            let open Ir.Pull in
-           let remote = Params.remote_get req |> Remote.remote
+           let remote =
+             Params.endpoint_get req
+             |> Endpoint_codec.decode
+             |> unwrap
+             |> remote_of_endpoint
            and branch = Params.branch_get req |> Codec.Branch.decode |> unwrap
            and message = Params.message_get req
            and author = Params.author_get req in

@@ -34,6 +34,8 @@ module type MAKER = functor (Store : Irmin.S) -> sig
 end
 
 module type Codec = sig
+  module type SERIALISABLE = SERIALISABLE
+
   module type MAKER = MAKER
 
   module Make : MAKER
