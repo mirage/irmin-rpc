@@ -14,6 +14,12 @@ let codec_of_type (type a) (t : a Irmin.Type.t) =
   in
   (encode, decode)
 
+module Unit = struct
+  type t = unit
+
+  let encode, decode = codec_of_type Irmin.Type.unit
+end
+
 module Make (Store : Irmin.S) = struct
   module Branch = struct
     type t = Store.branch

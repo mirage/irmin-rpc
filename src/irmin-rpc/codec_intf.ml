@@ -36,6 +36,8 @@ end
 module type Codec = sig
   module type SERIALISABLE = SERIALISABLE
 
+  module Unit : SERIALISABLE with type t = unit
+
   module type MAKER = MAKER
 
   module Make : MAKER
