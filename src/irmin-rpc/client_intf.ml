@@ -1,107 +1,75 @@
-type capability = Raw.Client.Irmin.t Capnp_rpc_lwt.Capability.t
+open Capnp_rpc_lwt
+open Irmin
+
+(* Concrete types for an RPC store. *)
+module Types = struct
+  type t = Raw.Client.Store.t Capability.t
+
+  type repo = Raw.Client.Repo.t Capability.t
+
+  type commit = Raw.Client.Commit.t Capability.t
+end
 
 module type S = sig
-  module Store : Irmin.S
+  module Store : sig
+    (** Subset of the Irmin store API in which stores, repositories and commits
+        are Capnp capabilities for optionally-remote values. *)
 
-  type t = capability
+    include module type of Types
+    (** @inline *)
 
-  type endpoint = Store.Private.Sync.endpoint
+    type tree
 
-  val get : t -> ?branch:Store.branch -> Store.key -> Store.contents Lwt.t
+    type branch
 
-  val find :
-    t -> ?branch:Store.branch -> Store.key -> Store.contents option Lwt.t
+    type key
 
-  val set :
-    t ->
-    ?branch:Store.branch ->
-    author:string ->
-    message:string ->
-    Store.key ->
-    Store.contents ->
-    Store.Hash.t Lwt.t
+    type contents
 
-  val remove :
-    t ->
-    ?branch:Store.branch ->
-    author:string ->
-    message:string ->
-    Store.key ->
-    Store.Hash.t Lwt.t
+    type hash
 
-  val merge :
-    t ->
-    ?branch:Store.branch ->
-    author:string ->
-    message:string ->
-    Store.branch ->
-    (Store.Hash.t, [ `Msg of string ]) result Lwt.t
+    val get : t -> key -> contents Lwt.t
 
-  val snapshot : ?branch:Store.branch -> t -> Store.Hash.t option Lwt.t
+    val find : t -> key -> (contents option, [> `Msg of string ]) result Lwt.t
 
-  val revert : t -> ?branch:Store.branch -> Store.Hash.t -> bool Lwt.t
+    val find_tree : t -> key -> tree option Lwt.t
 
-  module Tree : sig
-    val set :
-      t ->
-      ?branch:Store.branch ->
-      author:string ->
-      message:string ->
-      Store.key ->
-      Store.tree ->
-      Store.Hash.t Lwt.t
+    val set : info:Irmin.Info.f -> t -> key -> contents -> commit Lwt.t
 
-    val find : t -> ?branch:Store.branch -> Store.key -> Store.tree option Lwt.t
+    val set_tree : info:Irmin.Info.f -> t -> key -> tree -> commit Lwt.t
 
-    val get : t -> ?branch:Store.branch -> Store.key -> Store.tree Lwt.t
+    val remove : info:Info.f -> t -> key -> hash Lwt.t
+
+    val merge_into :
+      into:t -> info:Info.t -> (unit, Merge.conflict) result Lwt.t
+
+    module Branch : sig
+      val list : repo -> branch list Lwt.t
+
+      val remove : repo -> branch -> unit Lwt.t
+
+      val set : repo -> branch -> hash -> unit Lwt.t
+    end
   end
 
-  module Sync : sig
-    val clone :
-      t ->
-      ?branch:Store.branch ->
-      endpoint ->
-      (Store.Hash.t, [ `Msg of string ]) result Lwt.t
-
-    val pull :
-      t ->
-      ?branch:Store.branch ->
-      author:string ->
-      message:string ->
-      endpoint ->
-      (Store.Hash.t, [ `Msg of string ]) result Lwt.t
-    (** [pull t ~branch ~author ~message remote] pulls from the given remote
-        into the specified branch. A local merge commit is constructed using the
-        [(author, message)] metadata. *)
-
-    val push :
-      t ->
-      ?branch:Store.branch ->
-      endpoint ->
-      (unit, [ `Msg of string ]) result Lwt.t
-  end
-
-  module Commit : sig
-    val info : t -> Store.Hash.t -> Irmin.Info.t option Lwt.t
-
-    val history : t -> Store.Hash.t -> Store.Hash.t list Lwt.t
-  end
-
-  module Branch : sig
-    val list : t -> Store.branch list Lwt.t
-
-    val remove : t -> Store.branch -> unit Lwt.t
-
-    val create : t -> Store.branch -> Store.Hash.t -> unit Lwt.t
-  end
+  val heartbeat : string -> string Lwt.t
 end
+
+module type MAKER = functor
+  (Store : Irmin.S)
+  (Endpoint_codec : Codec.SERIALISABLE with type t = Store.Private.Sync.endpoint)
+  ->
+  S
+    with type Store.tree = Store.tree
+     and type Store.branch = Store.branch
+     and type Store.key = Store.key
+     and type Store.contents = Store.contents
+     and type Store.hash = Store.hash
 
 module type Client = sig
   module type S = S
 
-  module Make
-      (Store : Irmin.S)
-      (Endpoint_codec : Codec.SERIALISABLE
-                          with type t = Store.Private.Sync.endpoint) :
-    S with module Store = Store
+  module type MAKER = MAKER
+
+  module Make : MAKER
 end

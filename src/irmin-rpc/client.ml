@@ -2,7 +2,17 @@ include Client_intf
 open Capnp_rpc_lwt
 open Lwt.Infix
 
+module type S = S
+
+module type MAKER = MAKER
+
 exception Error_message of string
+
+exception Remote_error of string
+
+[@@@warning "-32"]
+
+[@@@warning "-33"]
 
 let unwrap = function Ok x -> x | Error (`Msg m) -> raise (Error_message m)
 
@@ -10,213 +20,75 @@ let error (`Capnp err) =
   let s = Fmt.to_to_string Capnp_rpc.Error.pp err in
   Error (`Msg s)
 
-module Make
-    (Store : Irmin.S)
-    (Endpoint_codec : Codec.SERIALISABLE
-                        with type t = Store.Private.Sync.endpoint) =
-struct
-  module Store = Store
-  module Ir = Raw.Client.Irmin
-  module Codec = Codec.Make (Store)
+let todo = assert false
 
-  type t = capability
+module Make : MAKER =
+functor
+  (Store : Irmin.S)
+  (Endpoint_codec : Codec.SERIALISABLE with type t = Store.Private.Sync.endpoint)
+  ->
+  struct
+    module Codec = Codec.Make (Store)
 
-  type endpoint = Store.Private.Sync.endpoint
+    module Store = struct
+      include Types
 
-  let branch_param branch_set p branch =
-    Option.fold ~some:Codec.Branch.encode ~none:"master" branch |> branch_set p
+      type tree = Store.tree
 
-  let find t ?branch key =
-    let open Ir.Find in
-    let req, p = Capability.Request.create Params.init_pointer in
-    branch_param Params.branch_set p branch;
-    Codec.Key.encode key |> Params.key_set p;
-    Capability.call_for_value_exn t method_id req >|= fun res ->
-    if Results.has_result res then
-      Some (Results.result_get res |> Codec.Contents.decode |> unwrap)
-    else None
+      type branch = Store.branch
 
-  let get t ?branch key =
-    find t ?branch key >|= function
-    | Some x -> x
-    | None -> raise (Error_message "Not found")
+      type key = Store.key
 
-  let set t ?branch ~author ~message key value =
-    let open Ir.Set in
-    let req, p = Capability.Request.create Params.init_pointer in
-    branch_param Params.branch_set p branch;
-    Params.author_set p author;
-    Params.message_set p message;
-    Codec.Key.encode key |> Params.key_set p;
-    Codec.Contents.encode value |> Params.value_set p;
-    Capability.call_for_value_exn t method_id req >|= fun res ->
-    if Results.has_result res then
-      Results.result_get res
-      |> Raw.Reader.Irmin.Commit.hash_get
-      |> Codec.Hash.decode
-      |> unwrap
-    else raise (Error_message "Unable to set key")
+      type contents = Store.contents
 
-  let remove t ?branch ~author ~message key =
-    let open Ir.Remove in
-    let req, p = Capability.Request.create Params.init_pointer in
-    branch_param Params.branch_set p branch;
-    Params.author_set p author;
-    Params.message_set p message;
-    Codec.Key.encode key |> Params.key_set p;
-    Capability.call_for_value_exn t method_id req >|= fun res ->
-    Results.result_get res
-    |> Raw.Reader.Irmin.Commit.hash_get
-    |> Codec.Hash.decode
-    |> unwrap
+      type hash = Store.hash
 
-  let merge t ?branch ~author ~message from =
-    let open Ir.Merge in
-    let req, p = Capability.Request.create Params.init_pointer in
-    branch_param Params.branch_into_set p branch;
-    Codec.Branch.encode from |> Params.branch_from_set p;
-    Params.author_set p author;
-    Params.message_set p message;
-    Capability.call_for_value t method_id req
-    >|= Result.fold ~error ~ok:(fun res ->
-            Results.result_get res
-            |> Raw.Reader.Irmin.Commit.hash_get
-            |> Codec.Hash.decode
-            |> unwrap
-            |> Result.ok)
+      let find t key =
+        let open Raw.Client.Store.Find in
+        let ( >>| ) x f = Result.map f x in
+        let req, p = Capability.Request.create Params.init_pointer in
+        Codec.Key.encode key |> Params.key_set p;
+        Capability.call_for_value_exn t method_id req >|= fun res ->
+        match Results.has_contents res with
+        | true ->
+            Results.contents_get res |> Codec.Contents.decode >>| Option.some
+        | false -> Ok None
 
-  let snapshot ?branch t =
-    let open Ir.Snapshot in
-    let req, p = Capability.Request.create Params.init_pointer in
-    branch_param Params.branch_set p branch;
-    Capability.call_for_value_exn t method_id req >|= fun res ->
-    if Results.has_result res then
-      Some (Results.result_get res |> Codec.Hash.decode |> unwrap)
-    else None
+      let get t key =
+        find t key >|= function
+        | Ok (Some c) -> c
+        | Ok None -> invalid_arg "Irmin_rpc: no blob found during get"
+        | Error (`Msg m) -> raise (Remote_error m)
 
-  let revert t ?branch hash =
-    let open Ir.Revert in
-    let req, p = Capability.Request.create Params.init_pointer in
-    branch_param Params.branch_set p branch;
-    Params.hash_set p (Codec.Hash.encode hash);
-    Capability.call_for_value_exn t method_id req >|= fun res ->
-    Results.result_get res
+      let find_tree t key =
+        let open Raw.Client.Store.FindTree in
+        let req, p = Capability.Request.create Params.init_pointer in
+        Codec.Key.encode key |> Params.key_set p;
+        Capability.call_for_value_exn t method_id req >|= fun res ->
+        match Results.has_tree res with
+        | true ->
+            Results.tree_get res
+            |> Codec.Tree.decode
+            |> Store.Tree.of_concrete
+            |> Option.some
+        | false -> None
 
-  module Tree = struct
-    let set t ?branch ~author ~message key tree =
-      let open Ir.SetTree in
-      let req, p = Capability.Request.create Params.init_pointer in
-      branch_param Params.branch_set p branch;
-      Params.author_set p author;
-      Params.message_set p message;
-      Codec.Key.encode key |> Params.key_set p;
-      let tr = Params.tree_init p in
-      Codec.encode_tree tr key tree >>= fun () ->
-      Capability.call_for_value_exn t method_id req >|= fun res ->
-      Results.result_get res
-      |> Raw.Reader.Irmin.Commit.hash_get
-      |> Codec.Hash.decode
-      |> unwrap
+      let set = todo
 
-    let find t ?branch key =
-      let open Ir.FindTree in
-      let req, p = Capability.Request.create Params.init_pointer in
-      branch_param Params.branch_set p branch;
-      Codec.Key.encode key |> Params.key_set p;
-      Capability.call_for_value_exn t method_id req >|= fun res ->
-      if Results.has_result res then
-        Some
-          (Results.result_get res |> Codec.decode_tree |> Store.Tree.of_concrete)
-      else None
+      let set_tree = todo
 
-    let get t ?branch key =
-      find t ?branch key >|= function
-      | Some x -> x
-      | None -> raise (Error_message "Not found")
+      let remove = todo
+
+      let merge_into = todo
+
+      module Branch = struct
+        let list = todo
+
+        let remove = todo
+
+        let set = todo
+      end
+    end
+
+    let heartbeat = todo
   end
-
-  module Sync = struct
-    let clone t ?branch endpoint =
-      let open Ir.Clone in
-      let req, p = Capability.Request.create Params.init_pointer in
-      branch_param Params.branch_set p branch;
-      endpoint |> Endpoint_codec.encode |> Params.endpoint_set p;
-      Capability.call_for_value t method_id req
-      >|= Result.fold ~error ~ok:(fun res ->
-              Results.result_get res
-              |> Raw.Reader.Irmin.Commit.hash_get
-              |> Codec.Hash.decode
-              |> unwrap
-              |> Result.ok)
-
-    let pull t ?branch ~author ~message endpoint =
-      let open Ir.Pull in
-      let req, p = Capability.Request.create Params.init_pointer in
-      branch_param Params.branch_set p branch;
-      Params.author_set p author;
-      Params.message_set p message;
-      endpoint |> Endpoint_codec.encode |> Params.endpoint_set p;
-      Capability.call_for_value t method_id req
-      >|= Result.fold ~error ~ok:(fun res ->
-              Results.result_get res
-              |> Raw.Reader.Irmin.Commit.hash_get
-              |> Codec.Hash.decode
-              |> unwrap
-              |> Result.ok)
-
-    let push t ?branch endpoint =
-      let open Ir.Push in
-      let req, p = Capability.Request.create Params.init_pointer in
-      branch_param Params.branch_set p branch;
-      endpoint |> Endpoint_codec.encode |> Params.endpoint_set p;
-      Capability.call_for_unit t method_id req >|= function
-      | Ok () -> Ok ()
-      | Error e -> error e
-  end
-
-  module Commit = struct
-    let info t hash =
-      let open Ir.CommitInfo in
-      let req, p = Capability.Request.create Params.init_pointer in
-      Params.hash_set p (Codec.Hash.encode hash);
-      Capability.call_for_value_exn t method_id req >|= fun res ->
-      if Results.has_result res then
-        let info = Results.result_get res in
-        let module Info = Raw.Reader.Irmin.Info in
-        let author = Info.author_get info in
-        let date = Info.date_get info in
-        let message = Info.message_get info in
-        Some (Irmin.Info.v ~date ~author message)
-      else None
-
-    let history t hash =
-      let open Ir.CommitHistory in
-      let req, p = Capability.Request.create Params.init_pointer in
-      Params.hash_set p (Codec.Hash.encode hash);
-      Capability.call_for_value_exn t method_id req >|= fun res ->
-      Results.result_get_list res
-      |> List.filter_map (fun x -> Codec.Hash.decode x |> Result.to_option)
-  end
-
-  module Branch = struct
-    let remove t branch =
-      let open Ir.RemoveBranch in
-      let req, p = Capability.Request.create Params.init_pointer in
-      branch_param Params.branch_set p (Some branch);
-      Capability.call_for_unit_exn t method_id req
-
-    let create t name hash =
-      let open Ir.CreateBranch in
-      let req, p = Capability.Request.create Params.init_pointer in
-      branch_param Params.branch_set p (Some name);
-      Params.hash_set p (Codec.Hash.encode hash);
-      Capability.call_for_unit_exn t method_id req
-
-    let list t =
-      let open Ir.Branches in
-      let req, _ = Capability.Request.create Params.init_pointer in
-      Capability.call_for_value_exn t method_id req >|= fun res ->
-      Results.result_get_list res
-      |> List.filter_map (fun x -> Codec.Branch.decode x |> Result.to_option)
-  end
-end

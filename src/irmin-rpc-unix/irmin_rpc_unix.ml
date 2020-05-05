@@ -24,13 +24,9 @@ module Make
     (Endpoint_codec : Irmin_rpc.Codec.SERIALISABLE
                         with type t = Store.Private.Sync.endpoint) =
 struct
-  module Info = struct
-    let info = Irmin_unix.info
-  end
-
-  module Rpc = Irmin_rpc.Make (Store) (Info) (Endpoint_codec)
-
   module Server = struct
+    module Api = Irmin_rpc.Server.Make (Store) (Endpoint_codec)
+
     type t = { uri : Uri.t }
 
     let uri { uri; _ } = uri
@@ -40,7 +36,9 @@ struct
         Capnp_rpc_unix.Vat_config.create ?backlog ~secret_key ?serve_tls addr
       in
       let service_id = Capnp_rpc_unix.Vat_config.derived_id config "main" in
-      let restore = Capnp_rpc_net.Restorer.single service_id (Rpc.local repo) in
+      let restore =
+        Capnp_rpc_net.Restorer.single service_id (Api.make_irmin repo)
+      in
       Capnp_rpc_unix.serve ?switch ~restore config >|= fun vat ->
       { uri = Capnp_rpc_unix.Vat.sturdy_uri vat service_id }
   end
