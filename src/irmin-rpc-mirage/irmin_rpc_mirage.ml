@@ -35,7 +35,9 @@ struct
           ~public_address (`TCP port)
       in
       let service_id = Capnp_rpc_mirage.Vat_config.derived_id config "main" in
-      let restore = Capnp_rpc_net.Restorer.single service_id (Rpc.local repo) in
+      let restore =
+        Capnp_rpc_net.Restorer.single service_id (Rpc.make_irmin repo)
+      in
       Capnp_rpc_mirage.serve net config ~restore >|= fun vat ->
       { uri = Capnp_rpc_mirage.Vat.sturdy_uri vat service_id }
 
