@@ -44,6 +44,13 @@ functor
   (Endpoint_codec : Codec.SERIALISABLE with type t = St.Private.Sync.endpoint)
   ->
   struct
+    module Sy = Irmin.Sync (St)
+
+    module Codec = struct
+      include Codec.Make (St)
+      module Endpoint = Endpoint_codec
+    end
+
     type repo = St.repo
 
     type store = St.t
@@ -64,9 +71,6 @@ functor
            ( Fmt.strf "%a" (Irmin.Type.pp St.write_error_t)
            >> Capnp_rpc.Exception.v ~ty:`Failed
            >> fun e -> `Capnp (`Exception e) ))
-
-    module Sync = Irmin.Sync (St)
-    module Codec = Codec.Make (St)
 
     module Commit = struct
       type t = Raw.Client.Commit.t cap
@@ -156,6 +160,45 @@ functor
         |> Commit.local
     end
 
+    module Sync = struct
+      let remote_of_endpoint e = St.E e
+
+      let _local store =
+        let module Sync = Raw.Service.Sync in
+        object
+          inherit Sync.service
+
+          method push_impl params release_param_caps =
+            let open Sync.Push in
+            let endpoint = Params.endpoint_get params in
+            release_param_caps ();
+            Logs.info (fun f -> f "Sync.push");
+            with_initialised_results
+              (module Results)
+              (fun results ->
+                let remote =
+                  endpoint
+                  |> Codec.Endpoint.decode
+                  |> unwrap
+                  |> remote_of_endpoint
+                in
+                let b_push_result = Raw.Builder.Sync.PushResult.init_root () in
+                let+ () =
+                  Sy.push store remote
+                  >>= Codec.Push_result.encode b_push_result
+                in
+                let (_ : Raw.Builder.Sync.PushResult.t) =
+                  Results.result_set_builder results b_push_result
+                in
+                Ok ())
+
+          method pull_impl = todo
+
+          method clone_impl = todo
+        end
+        |> Sync.local
+    end
+
     module Store = struct
       type t = Raw.Client.Store.t cap
 
@@ -237,9 +280,42 @@ functor
                 in
                 Service.Response.create_empty ())
 
-          method remove_impl = todo
+          method remove_impl params release_param_caps =
+            let open Store.Remove in
+            let key = Params.key_get params and info = Params.info_get params in
+            release_param_caps ();
+            Logs.info (fun f -> f "Store.remove");
+            Service.return_lwt (fun () ->
+                let key = key |> Codec.Key.decode |> unwrap
+                and info = info |> Codec.Info.decode in
+                let+! () =
+                  St.remove ~info:(fun () -> info) store key
+                  |> process_write_error
+                in
+                Service.Response.create_empty ())
 
-          method merge_into_impl = todo
+          method merge_with_branch_impl params release_param_caps =
+            let open Store.MergeWithBranch in
+            let branch = Params.branch_get params
+            and info = Params.info_get params in
+            release_param_caps ();
+            Logs.info (fun f -> f "Store.merge_into");
+            with_initialised_results
+              (module Results)
+              (fun results ->
+                let branch = branch |> Codec.Branch.decode |> unwrap
+                and info = info |> Codec.Info.decode in
+                let b_merge_result =
+                  Raw.Builder.Store.MergeResult.init_root ()
+                in
+                let+ () =
+                  St.merge_with_branch store ~info:(fun () -> info) branch
+                  >|= Codec.Merge_result.encode b_merge_result
+                in
+                let (_ : Raw.Builder.Store.MergeResult.t) =
+                  Results.result_set_builder results b_merge_result
+                in
+                Ok ())
 
           method sync_impl = todo
         end

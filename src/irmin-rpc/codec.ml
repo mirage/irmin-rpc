@@ -5,6 +5,8 @@ exception Error_message of string
 
 let unwrap = function Ok x -> x | Error (`Msg m) -> raise (Error_message m)
 
+let errorf fmt = Format.kasprintf (fun m -> Error (`Msg m)) fmt
+
 let codec_of_type (type a) (t : a Irmin.Type.t) =
   let encode = Irmin.Type.to_string t
   and decode s =
@@ -146,6 +148,54 @@ module Make (Store : Irmin.S) = struct
           | Some c -> Ok c
           | None -> Error (`Commit_not_found hash) )
       | Error _ as e -> Lwt.return e
+  end
+
+  module Merge_result = struct
+    type t = (unit, Irmin.Merge.conflict) result
+
+    let encode : Raw.Builder.Store.MergeResult.t -> t -> unit =
+     fun b t ->
+      let open Raw.Builder.Store.MergeResult in
+      match t with
+      | Ok () -> ok_set b
+      | Error (`Conflict msg) -> error_msg_set b msg
+
+    let decode :
+        Raw.Reader.Store.MergeResult.t -> (t, [ `Msg of string ]) result =
+     fun str ->
+      let open Raw.Reader.Store.MergeResult in
+      match get str with
+      | Ok -> Ok (Ok ())
+      | ErrorMsg m -> Ok (Error (`Conflict m))
+      | Undefined i -> errorf "Unknown MergeResult case with tag %i" i
+  end
+
+  module Push_result = struct
+    type t =
+      ( [ `Empty | `Head of Store.commit ],
+        [ `Detached_head | `Msg of string ] )
+      result
+
+    let encode : Raw.Builder.Sync.PushResult.t -> t -> unit Lwt.t =
+     fun b t ->
+      let open Raw.Builder.Sync.PushResult in
+      match t with
+      | Ok `Empty ->
+          ok_empty_set b;
+          Lwt.return_unit
+      | Ok (`Head c) ->
+          let b_commit = Raw.Builder.Commit.Value.init_root () in
+          let+ () = Commit.encode b_commit c in
+          let (_ : Raw.Builder.Commit.Value.t) =
+            ok_head_set_builder b b_commit
+          in
+          ()
+      | Error `Detached_head ->
+          error_detached_head_set b;
+          Lwt.return_unit
+      | Error (`Msg m) ->
+          error_msg_set b m;
+          Lwt.return_unit
   end
 
   let encode_commit_info cm info =

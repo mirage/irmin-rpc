@@ -50,6 +50,24 @@ module type MAKER = functor (Store : Irmin.S) -> sig
       (t, [> `Msg of string | `Commit_not_found of Store.hash ]) result Lwt.t
   end
 
+  module Merge_result : sig
+    type t = (unit, Irmin.Merge.conflict) result
+
+    val encode : Raw.Builder.Store.MergeResult.t -> t -> unit
+
+    val decode :
+      Raw.Reader.Store.MergeResult.t -> (t, [ `Msg of string ]) result
+  end
+
+  module Push_result : sig
+    type t =
+      ( [ `Empty | `Head of Store.commit ],
+        [ `Detached_head | `Msg of string ] )
+      result
+
+    val encode : Raw.Builder.Sync.PushResult.t -> t -> unit Lwt.t
+  end
+
   val encode_commit_info : Store.commit -> info_struct builder_t -> unit
 end
 

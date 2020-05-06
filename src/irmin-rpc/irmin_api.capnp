@@ -36,7 +36,16 @@ interface Commit {
 }
 
 interface Sync {
-  push   @0  (branch :Text, endpoint :Data) -> ();
+  struct PushResult {
+    union {
+      okEmpty            @0  :Void;
+      okHead             @1  :Commit.Value;
+      errorDetachedHead  @2  :Void;
+      errorMsg           @3  :Text;
+    }
+  }
+
+  push   @0  (branch :Text, endpoint :Data) -> (result :PushResult);
   pull   @1  (branch :Text, endpoint :Data, info :Info) -> (result :Commit);
   clone  @2  (branch :Text, endpoint :Data) -> (result :Commit);
 }
@@ -56,7 +65,7 @@ interface Store {
     }
   }
 
-  mergeInto  @5  (into :Store, info :Info) -> (result :MergeResult);
+  mergeWithBranch  @5  (branch :Text, info :Info) -> (result :MergeResult);
 
   sync  @6  () -> (sync :Sync);
 }
