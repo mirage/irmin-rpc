@@ -1,8 +1,11 @@
 open Server_intf
 open Capnp_rpc_lwt
 open Lwt.Infix
+open Utils
 
 let ( let+ ) x f = Lwt.map f x
+
+let ( let+! ) x f = Lwt.map (Result.map f) x
 
 let ( let* ) = Lwt.bind
 
@@ -54,6 +57,13 @@ functor
       | Error (`Msg m) -> failwith m
       | Error (`Commit_not_found h) ->
           Fmt.failwith "Commit not found: %a" (Irmin.Type.pp St.Hash.t) h
+
+    let process_write_error =
+      Lwt.map
+        (Result.map_error
+           ( Fmt.strf "%a" (Irmin.Type.pp St.write_error_t)
+           >> Capnp_rpc.Exception.v ~ty:`Failed
+           >> fun e -> `Capnp (`Exception e) ))
 
     module Sync = Irmin.Sync (St)
     module Codec = Codec.Make (St)
@@ -135,11 +145,13 @@ functor
             Logs.info (fun f -> f "Commit.read");
             with_initialised_results
               (module Results)
-              (fun _results ->
-                let open Raw.Builder.Commit.Value in
-                let _value = init_root () in
-                assert false
-                (* TODO *))
+              (fun results ->
+                let b_value = Raw.Builder.Commit.Value.init_root () in
+                let+ () = Codec.Commit.encode b_value commit in
+                let (_ : Raw.Builder.Commit.Value.t) =
+                  Results.value_set_builder results b_value
+                in
+                Ok ())
         end
         |> Commit.local
     end
@@ -147,18 +159,83 @@ functor
     module Store = struct
       type t = Raw.Client.Store.t cap
 
-      let local _store =
+      let local store =
         let module Store = Raw.Service.Store in
         object
           inherit Store.service
 
-          method find_impl = todo
+          method find_impl params release_param_caps =
+            let open Store.Find in
+            let key = Params.key_get params in
+            release_param_caps ();
+            Logs.info (fun f -> f "Store.find");
+            with_initialised_results
+              (module Results)
+              (fun results ->
+                let key = Codec.Key.decode key |> unwrap in
+                let+ () =
+                  St.find store key
+                  >|= Option.iter
+                        (Codec.Contents.encode >> Results.contents_set results)
+                in
+                Ok ())
 
-          method find_tree_impl = todo
+          method find_tree_impl params release_param_caps =
+            let open Store.FindTree in
+            let key = Params.key_get params in
+            release_param_caps ();
+            Logs.info (fun f -> f "Store.find_tree");
+            with_initialised_results
+              (module Results)
+              (fun results ->
+                let key = Codec.Key.decode key |> unwrap in
+                let+ () =
+                  let b_tree = Raw.Builder.Tree.init_root () in
+                  St.find_tree store key
+                  >>= Option.iter_lwt (fun tree ->
+                          let+ () =
+                            Codec.Tree.encode b_tree St.Key.empty tree
+                          in
+                          let (_ : Raw.Builder.Tree.t) =
+                            Results.tree_set_builder results b_tree
+                          in
+                          ())
+                in
+                Ok ())
 
-          method set_impl = todo
+          method set_impl params release_param_caps =
+            let open Store.Set in
+            let key = Params.key_get params
+            and info = Params.info_get params
+            and contents = Params.contents_get params in
+            release_param_caps ();
+            Logs.info (fun f -> f "Store.set");
+            Service.return_lwt (fun () ->
+                let key = key |> Codec.Key.decode |> unwrap
+                and info = info |> Codec.Info.decode
+                and contents = contents |> Codec.Contents.decode |> unwrap in
+                let+! () =
+                  St.set ~info:(fun () -> info) store key contents
+                  |> process_write_error
+                in
+                Service.Response.create_empty ())
 
-          method set_tree_impl = todo
+          method set_tree_impl params release_param_caps =
+            let open Store.SetTree in
+            let key = Params.key_get params
+            and info = Params.info_get params
+            and tree = Params.tree_get params in
+            release_param_caps ();
+            Logs.info (fun f -> f "Store.set_tree");
+            Service.return_lwt (fun () ->
+                let key = key |> Codec.Key.decode |> unwrap
+                and info = info |> Codec.Info.decode
+                and tree = tree |> Codec.Tree.decode |> St.Tree.of_concrete in
+                let+! () =
+                  St.set_tree ~info:(fun () -> info) store key tree
+                  |> process_write_error
+                in
+                Service.Response.create_empty ())
 
           method remove_impl = todo
 

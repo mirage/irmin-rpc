@@ -42,11 +42,11 @@ interface Sync {
 }
 
 interface Store {
-  find      @0  (key :Text) -> (result :Data);
-  findTree  @1  (key :Text) -> (result :Tree);
-  set       @2  (key :Text, info :Info, value :Data) -> (result :Commit);
-  setTree   @3  (key :Text, info :Info, tree :Tree) -> (result :Commit);
-  remove    @4  (key :Text, info :Info) -> (result :Commit);
+  find      @0  (key :Text) -> (contents :Data);
+  findTree  @1  (key :Text) -> (tree :Tree);
+  set       @2  (key :Text, info :Info, contents :Data) -> ();
+  setTree   @3  (key :Text, info :Info, tree :Tree) -> ();
+  remove    @4  (key :Text, info :Info) -> ();
 
   # Merge API on stores
   struct MergeResult {

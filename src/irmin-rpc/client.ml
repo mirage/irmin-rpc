@@ -49,9 +49,9 @@ functor
         let req, p = Capability.Request.create Params.init_pointer in
         Codec.Key.encode key |> Params.key_set p;
         Capability.call_for_value_exn t method_id req >|= fun res ->
-        match Results.has_result res with
+        match Results.has_contents res with
         | true ->
-            Results.result_get res |> Codec.Contents.decode >>| Option.some
+            Results.contents_get res |> Codec.Contents.decode >>| Option.some
         | false -> Ok None
 
       let get t key =
@@ -65,9 +65,9 @@ functor
         let req, p = Capability.Request.create Params.init_pointer in
         Codec.Key.encode key |> Params.key_set p;
         Capability.call_for_value_exn t method_id req >|= fun res ->
-        match Results.has_result res with
+        match Results.has_tree res with
         | true ->
-            Results.result_get res
+            Results.tree_get res
             |> Codec.Tree.decode
             |> Store.Tree.of_concrete
             |> Option.some
