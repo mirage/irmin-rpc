@@ -29,3 +29,7 @@ depends:
 ]
 
 synopsis: "Cap'n Proto RPC client/server for Irmin"
+
+pin-depends: [
+  "irmin.dev" "git+https://github.com/mirage/irmin#master"
+]

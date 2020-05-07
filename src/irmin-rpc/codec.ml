@@ -52,13 +52,14 @@ module Make (Store : Irmin.S) = struct
   module Info = struct
     type t = Irmin.Info.t
 
-    let encode : Raw.Builder.Info.t -> t -> unit =
-     fun b t ->
+    let encode : t -> Raw.Builder.Info.t =
+     fun t ->
       let open Raw.Builder.Info in
+      let b = init_root () in
       author_set b (Irmin.Info.author t);
       message_set b (Irmin.Info.message t);
       date_set b (Irmin.Info.date t);
-      ()
+      b
 
     let decode : Raw.Reader.Info.t -> t =
      fun str ->
@@ -72,68 +73,79 @@ module Make (Store : Irmin.S) = struct
   module Tree = struct
     type t = Store.tree
 
-    let rec encode tr key (tree : Store.tree) : unit Lwt.t =
-      let module B = Raw.Builder in
-      let module R = Raw.Reader in
-      Irmin.Type.to_string Store.key_t key |> B.Tree.key_set tr;
-      Store.Tree.to_concrete tree >>= function
-      | `Contents (contents, _) ->
-          B.Tree.contents_set tr
-            (Irmin.Type.to_string Store.contents_t contents);
-          Lwt.return_unit
-      | `Tree l ->
-          Lwt_list.map_p
-            (fun (step, tree) ->
-              let node = B.Node.init_root () in
-              Irmin.Type.to_string Store.step_t step |> B.Node.step_set node;
-              let tt = B.Node.tree_init node in
-              let tree = Store.Tree.of_concrete tree in
-              encode tt (Store.Key.rcons key step) tree >|= fun () -> node)
-            l
-          >>= fun l ->
-          let (_ : (Irmin_api.rw, B.Node.t, R.builder_array_t) Capnp.Array.t) =
-            B.Tree.node_set_list tr l
-          in
-          Lwt.return_unit
+    (** TODO: avoid coercions to and from concrete trees *)
 
-    let rec decode tree =
-      let module Tree = Raw.Reader.Tree in
-      let module Node = Raw.Reader.Node in
-      match Tree.get tree with
-      | Node l ->
-          Capnp.Array.to_list l
-          |> List.map (fun node ->
-                 let step =
-                   Node.step_get node
-                   |> Irmin.Type.of_string Store.step_t
-                   |> unwrap
-                 in
-                 let tree = Node.tree_get node |> decode in
-                 (step, tree))
-          |> fun t -> `Tree t
-      | Contents c ->
-          let c = Irmin.Type.of_string Store.contents_t c |> unwrap in
-          `Contents (c, Store.Metadata.default)
-      | Undefined _ -> `Tree []
+    let encode (tree : Store.tree) : Raw.Builder.Tree.t Lwt.t =
+      let rec inner tr key tree =
+        let module B = Raw.Builder in
+        let module R = Raw.Reader in
+        Irmin.Type.to_string Store.key_t key |> B.Tree.key_set tr;
+        Store.Tree.to_concrete tree >>= function
+        | `Contents (contents, _) ->
+            B.Tree.contents_set tr
+              (Irmin.Type.to_string Store.contents_t contents);
+            Lwt.return_unit
+        | `Tree l ->
+            Lwt_list.map_p
+              (fun (step, tree) ->
+                let node = B.Node.init_root () in
+                Irmin.Type.to_string Store.step_t step |> B.Node.step_set node;
+                let tt = B.Node.tree_init node in
+                let tree = Store.Tree.of_concrete tree in
+                inner tt (Store.Key.rcons key step) tree >|= fun () -> node)
+              l
+            >>= fun l ->
+            let (_ : (Irmin_api.rw, B.Node.t, R.builder_array_t) Capnp.Array.t)
+                =
+              B.Tree.node_set_list tr l
+            in
+            Lwt.return_unit
+      in
+      let tr = Raw.Builder.Tree.init_root () in
+      let+ () = inner tr Store.Key.empty tree in
+      tr
+
+    let decode tree =
+      let rec inner tree =
+        let module Tree = Raw.Reader.Tree in
+        let module Node = Raw.Reader.Node in
+        match Tree.get tree with
+        | Node l ->
+            Capnp.Array.to_list l
+            |> List.map (fun node ->
+                   let step =
+                     Node.step_get node
+                     |> Irmin.Type.of_string Store.step_t
+                     |> unwrap
+                   in
+                   let tree = Node.tree_get node |> inner in
+                   (step, tree))
+            |> fun t -> `Tree t
+        | Contents c ->
+            let c = Irmin.Type.of_string Store.contents_t c |> unwrap in
+            `Contents (c, Store.Metadata.default)
+        | Undefined _ -> `Tree []
+      in
+      inner tree |> Store.Tree.of_concrete
   end
 
   module Commit = struct
     type t = Store.commit
 
-    let encode : Raw.Builder.Commit.Value.t -> t -> unit Lwt.t =
-     fun b t ->
+    let encode : t -> Raw.Builder.Commit.Value.t Lwt.t =
+     fun t ->
       let open Raw.Builder.Commit.Value in
+      let b = Raw.Builder.Commit.Value.init_root () in
       hash_set b (Store.Commit.hash t |> Hash.encode);
-      let b_info = Raw.Builder.Info.init_root () in
-      Store.Commit.info t |> Info.encode b_info;
-      let (_ : Raw.Builder.Info.t) = info_set_builder b b_info in
-      let (_ : (_, _, _) Capnp.Array.t) =
-        parents_set_list b (Store.Commit.parents t |> List.map Hash.encode)
+      let (_ : Raw.Builder.Info.t) =
+        info_set_builder b (Store.Commit.info t |> Info.encode)
       in
-      let b_tree = Raw.Builder.Tree.init_root () in
-      let+ () = Store.Commit.tree t |> Tree.encode b_tree Store.Key.empty in
-      let (_ : Raw.Builder.Tree.t) = tree_set_builder b b_tree in
-      ()
+      ignore
+        (parents_set_list b (Store.Commit.parents t |> List.map Hash.encode));
+      let+ (_ : Raw.Builder.Tree.t) =
+        Store.Commit.tree t |> Tree.encode >|= tree_set_builder b
+      in
+      b
 
     let decode :
         Store.repo ->
@@ -176,26 +188,23 @@ module Make (Store : Irmin.S) = struct
         [ `Detached_head | `Msg of string ] )
       result
 
-    let encode : Raw.Builder.Sync.PushResult.t -> t -> unit Lwt.t =
-     fun b t ->
+    let encode : t -> Raw.Builder.Sync.PushResult.t Lwt.t =
+     fun t ->
       let open Raw.Builder.Sync.PushResult in
+      let b = init_root () in
       match t with
       | Ok `Empty ->
           ok_empty_set b;
-          Lwt.return_unit
+          Lwt.return b
       | Ok (`Head c) ->
-          let b_commit = Raw.Builder.Commit.Value.init_root () in
-          let+ () = Commit.encode b_commit c in
-          let (_ : Raw.Builder.Commit.Value.t) =
-            ok_head_set_builder b b_commit
-          in
-          ()
+          c |> Commit.encode >|= ok_head_set_builder b
+          >|= fun (_ : Raw.Builder.Commit.Value.t) -> b
       | Error `Detached_head ->
           error_detached_head_set b;
-          Lwt.return_unit
+          Lwt.return b
       | Error (`Msg m) ->
           error_msg_set b m;
-          Lwt.return_unit
+          Lwt.return b
   end
 
   let encode_commit_info cm info =

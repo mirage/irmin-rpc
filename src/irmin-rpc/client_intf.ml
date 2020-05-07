@@ -11,6 +11,9 @@ module Types = struct
 end
 
 module type S = sig
+  type t = Raw.Client.Irmin.t Capability.t
+  (** A handle on an Irmin RPC server. *)
+
   module Store : sig
     (** Subset of the Irmin store API in which stores, repositories and commits
         are Capnp capabilities for optionally-remote values. *)
@@ -34,25 +37,33 @@ module type S = sig
 
     val find_tree : t -> key -> tree option Lwt.t
 
-    val set : info:Irmin.Info.f -> t -> key -> contents -> commit Lwt.t
+    val set : info:Irmin.Info.f -> t -> key -> contents -> unit Lwt.t
 
-    val set_tree : info:Irmin.Info.f -> t -> key -> tree -> commit Lwt.t
+    val set_tree : info:Irmin.Info.f -> t -> key -> tree -> unit Lwt.t
 
-    val remove : info:Info.f -> t -> key -> hash Lwt.t
+    val remove : info:Info.f -> t -> key -> unit Lwt.t
 
-    val merge_into :
-      into:t -> info:Info.t -> (unit, Merge.conflict) result Lwt.t
+    val merge_with_branch :
+      t -> info:Info.f -> branch -> (unit, Merge.conflict) result Lwt.t
 
     module Branch : sig
       val list : repo -> branch list Lwt.t
 
       val remove : repo -> branch -> unit Lwt.t
 
-      val set : repo -> branch -> hash -> unit Lwt.t
+      val set : repo -> branch -> commit -> unit Lwt.t
+    end
+
+    module Repo : sig
+      val master : repo -> t Lwt.t
+
+      val of_branch : repo -> branch -> t Lwt.t
     end
   end
 
-  val heartbeat : string -> string Lwt.t
+  val repo : t -> Store.repo Lwt.t
+
+  val heartbeat : t -> string -> string Lwt.t
 end
 
 module type MAKER = functor

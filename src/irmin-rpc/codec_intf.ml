@@ -1,7 +1,5 @@
 open Raw
 
-type tree_struct = Builder.Tree.struct_t
-
 type info_struct = Builder.Info.struct_t
 
 type commit_struct = Builder.Commit.Value.struct_t
@@ -26,7 +24,7 @@ module type MAKER = functor (Store : Irmin.S) -> sig
   module Info : sig
     type t = Irmin.Info.t
 
-    val encode : Raw.Builder.Info.t -> t -> unit
+    val encode : t -> Raw.Builder.Info.t
 
     val decode : Raw.Reader.Info.t -> t
   end
@@ -34,15 +32,15 @@ module type MAKER = functor (Store : Irmin.S) -> sig
   module Tree : sig
     type t = Store.tree
 
-    val encode : tree_struct builder_t -> Store.key -> t -> unit Lwt.t
+    val encode : t -> Raw.Builder.Tree.t Lwt.t
 
-    val decode : tree_struct reader_t -> Store.Tree.concrete
+    val decode : Raw.Reader.Tree.t -> t
   end
 
   module Commit : sig
     type t = Store.commit
 
-    val encode : Raw.Builder.Commit.Value.t -> t -> unit Lwt.t
+    val encode : t -> Raw.Builder.Commit.Value.t Lwt.t
 
     val decode :
       Store.repo ->
@@ -65,7 +63,7 @@ module type MAKER = functor (Store : Irmin.S) -> sig
         [ `Detached_head | `Msg of string ] )
       result
 
-    val encode : Raw.Builder.Sync.PushResult.t -> t -> unit Lwt.t
+    val encode : t -> Raw.Builder.Sync.PushResult.t Lwt.t
   end
 
   val encode_commit_info : Store.commit -> info_struct builder_t -> unit

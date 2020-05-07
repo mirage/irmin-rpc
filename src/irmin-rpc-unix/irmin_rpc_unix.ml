@@ -13,7 +13,7 @@ module Git_unix_endpoint_codec = struct
     let open Sexplib0.Sexp_conv in
     let uri_string, headers =
       str
-      |> Sexplib.Sexp.of_string
+      |> sexp_of_string
       |> pair_of_sexp string_of_sexp Cohttp.Header.t_of_sexp
     in
     Ok Git_unix.{ uri = Uri.of_string uri_string; headers }
@@ -36,9 +36,7 @@ struct
         Capnp_rpc_unix.Vat_config.create ?backlog ~secret_key ?serve_tls addr
       in
       let service_id = Capnp_rpc_unix.Vat_config.derived_id config "main" in
-      let restore =
-        Capnp_rpc_net.Restorer.single service_id (Api.make_irmin repo)
-      in
+      let restore = Capnp_rpc_net.Restorer.single service_id (Api.local repo) in
       Capnp_rpc_unix.serve ?switch ~restore config >|= fun vat ->
       { uri = Capnp_rpc_unix.Vat.sturdy_uri vat service_id }
   end

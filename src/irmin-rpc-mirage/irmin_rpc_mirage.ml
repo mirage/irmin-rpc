@@ -14,19 +14,9 @@ struct
   module Dns = Capnp_rpc_mirage.Network.Dns
 
   module Server = struct
-    module Info = struct
-      module Info = Irmin_mirage.Info (Pclock)
+    module Rpc = Irmin_rpc.Make (Store) (Endpoint_codec)
 
-      let info ?(author = "irmin-rpc") = Info.f ~author
-    end
-
-    module Rpc = Irmin_rpc.Make (Store) (Info) (Endpoint_codec)
-
-    type t = { uri : Uri.t }
-
-    let uri { uri; _ } = uri
-
-    let create ~secret_key ?serve_tls ?(port = 1111) stack ~addr repo =
+    let serve ~secret_key ?switch ?serve_tls ?(port = 1111) stack ~addr repo =
       let dns = Dns.create stack in
       let net = Capnp_rpc_mirage.network ~dns stack in
       let public_address = `TCP (addr, port) in
@@ -36,12 +26,12 @@ struct
       in
       let service_id = Capnp_rpc_mirage.Vat_config.derived_id config "main" in
       let restore =
-        Capnp_rpc_net.Restorer.single service_id (Rpc.make_irmin repo)
+        Capnp_rpc_net.Restorer.single service_id (Rpc.Server.local repo)
       in
-      Capnp_rpc_mirage.serve net config ~restore >|= fun vat ->
-      { uri = Capnp_rpc_mirage.Vat.sturdy_uri vat service_id }
+      Capnp_rpc_mirage.serve ?switch net config ~restore >|= fun vat ->
+      Capnp_rpc_mirage.Vat.sturdy_uri vat service_id
 
-    let run _t = fst @@ Lwt.wait ()
+    include Rpc.Server
   end
 
   module Client = struct
