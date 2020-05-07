@@ -1,5 +1,4 @@
 (test
  (name test)
- (package irmin-rpc-unix)
- (libraries alcotest alcotest-lwt digestif.c cohttp irmin irmin-git
-   irmin-rpc-unix irmin-unix logs lwt lwt.unix sexplib0))
+ (package irmin-rpc)
+ (libraries alcotest alcotest-lwt irmin irmin-mem irmin-rpc lwt lwt.unix))

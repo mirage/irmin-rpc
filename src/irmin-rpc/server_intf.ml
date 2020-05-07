@@ -43,6 +43,7 @@ module type MAKER = functor
     with type repo = Store.repo
      and type store = Store.t
      and type commit = Store.commit
+     and type hash = Store.hash
 
 module type Server = sig
   module type S = S

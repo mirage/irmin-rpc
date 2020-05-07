@@ -1,6 +1,7 @@
 (executables
  (names client server)
- (libraries checkseum.c digestif.c irmin-rpc-unix))
+ (libraries checkseum.c digestif.c irmin irmin-unix irmin-rpc-unix lwt
+   lwt.unix uri irmin-mem capnp-rpc-unix))
 
 (alias
  (name runtest)

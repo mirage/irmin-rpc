@@ -10,26 +10,32 @@ module Make
   module Dns : module type of Dns_client_mirage.Make (Random) (Mclock) (Stack)
 
   module Server : sig
-    module Rpc : Irmin_rpc.S with module Store = Store
+    include
+      Irmin_rpc.Server.S
+        with type repo = Store.repo
+         and type store = Store.t
+         and type commit = Store.commit
+         and type hash = Store.hash
 
-    type t
-
-    val uri : t -> Uri.t
-
-    val create :
+    val serve :
       secret_key:[< `PEM of string | `Ephemeral ] ->
+      ?switch:Lwt_switch.t ->
       ?serve_tls:bool ->
       ?port:int ->
       Stack.t ->
       addr:string ->
-      Store.repo ->
-      t Lwt.t
-
-    val run : t -> 'a Lwt.t
+      repo ->
+      Uri.t Lwt.t
   end
 
   module Client : sig
-    include Irmin_rpc.Client.S with module Store = Store
+    include
+      Irmin_rpc.Client.S
+        with type Store.tree = Store.tree
+         and type Store.branch = Store.branch
+         and type Store.key = Store.key
+         and type Store.contents = Store.contents
+         and type Store.hash = Store.hash
 
     val connect : Stack.t -> Uri.t -> t Lwt.t
   end

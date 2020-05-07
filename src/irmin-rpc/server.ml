@@ -95,11 +95,10 @@ functor
             with_initialised_results
               (module Results)
               (fun results ->
-                let tree = St.Commit.tree commit in
-                let tree_builder = Raw.Builder.Tree.init_root () in
-                let+ () = Codec.Tree.encode tree_builder St.Key.empty tree in
-                let (_ : Raw.Builder.Tree.t) =
-                  Results.tree_set_builder results tree_builder
+                let+ (_ : Raw.Builder.Tree.t) =
+                  St.Commit.tree commit
+                  |> Codec.Tree.encode
+                  >|= Results.tree_set_builder results
                 in
                 Ok ())
 
@@ -123,12 +122,10 @@ functor
             with_initialised_results
               (module Results)
               (fun results ->
-                let info_builder = Raw.Builder.Info.init_root () in
-                let () =
-                  Codec.Info.encode info_builder (St.Commit.info commit)
-                in
                 let (_ : Raw.Builder.Info.t) =
-                  Results.info_set_builder results info_builder
+                  St.Commit.info commit
+                  |> Codec.Info.encode
+                  |> Results.info_set_builder results
                 in
                 Lwt.return (Ok ()))
 
@@ -150,10 +147,10 @@ functor
             with_initialised_results
               (module Results)
               (fun results ->
-                let b_value = Raw.Builder.Commit.Value.init_root () in
-                let+ () = Codec.Commit.encode b_value commit in
-                let (_ : Raw.Builder.Commit.Value.t) =
-                  Results.value_set_builder results b_value
+                let+ (_ : Raw.Builder.Commit.Value.t) =
+                  commit
+                  |> Codec.Commit.encode
+                  >|= Results.value_set_builder results
                 in
                 Ok ())
         end
@@ -182,13 +179,10 @@ functor
                   |> unwrap
                   |> remote_of_endpoint
                 in
-                let b_push_result = Raw.Builder.Sync.PushResult.init_root () in
-                let+ () =
+                let+ (_ : Raw.Builder.Sync.PushResult.t) =
                   Sy.push store remote
-                  >>= Codec.Push_result.encode b_push_result
-                in
-                let (_ : Raw.Builder.Sync.PushResult.t) =
-                  Results.result_set_builder results b_push_result
+                  >>= Codec.Push_result.encode
+                  >|= Results.result_set_builder results
                 in
                 Ok ())
 
@@ -233,16 +227,12 @@ functor
               (fun results ->
                 let key = Codec.Key.decode key |> unwrap in
                 let+ () =
-                  let b_tree = Raw.Builder.Tree.init_root () in
                   St.find_tree store key
                   >>= Option.iter_lwt (fun tree ->
-                          let+ () =
-                            Codec.Tree.encode b_tree St.Key.empty tree
-                          in
-                          let (_ : Raw.Builder.Tree.t) =
-                            Results.tree_set_builder results b_tree
-                          in
-                          ())
+                          tree
+                          |> Codec.Tree.encode
+                          >|= Results.tree_set_builder results
+                          >|= fun (_ : Raw.Builder.Tree.t) -> ())
                 in
                 Ok ())
 
@@ -273,7 +263,7 @@ functor
             Service.return_lwt (fun () ->
                 let key = key |> Codec.Key.decode |> unwrap
                 and info = info |> Codec.Info.decode
-                and tree = tree |> Codec.Tree.decode |> St.Tree.of_concrete in
+                and tree = tree |> Codec.Tree.decode in
                 let+! () =
                   St.set_tree ~info:(fun () -> info) store key tree
                   |> process_write_error

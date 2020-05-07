@@ -2,4 +2,5 @@
  (name main)
  (public_name irmin-rpc)
  (package irmin-rpc-unix)
- (libraries cmdliner checkseum.c digestif.c irmin-rpc-unix))
+ (libraries cmdliner checkseum.c digestif.c irmin irmin-rpc-unix lwt lwt.unix git
+   irmin-git irmin-unix capnp-rpc-unix uri))
