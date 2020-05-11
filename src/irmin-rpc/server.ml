@@ -328,7 +328,9 @@ functor
               (module Results)
               (fun results ->
                 let+ store = St.master repo in
-                Results.store_set results (Some (Store.local store));
+                let master = Store.local store in
+                Capability.inc_ref master;
+                Results.store_set results (Some master);
                 Ok ())
 
           method of_branch_impl params release_param_caps =
@@ -398,13 +400,16 @@ functor
       object
         inherit I.service
 
+        val repo_service = Repo.local ctx
+
         method repo_impl _params release_param_caps =
           let open I.Repo in
           release_param_caps ();
           let response, results =
             Service.Response.create Results.init_pointer
           in
-          Results.repo_set results (Some (Repo.local ctx));
+          Capability.inc_ref repo_service;
+          Results.repo_set results (Some repo_service);
           Service.return response
 
         method heartbeat_impl = todo

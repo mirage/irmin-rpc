@@ -17,7 +17,7 @@ let ( let* ) = Lwt.bind
 
 let main =
   let* repo = Uri.of_string uri |> Rpc.Client.connect >>= Rpc.Client.repo in
-  let* master = Store.Repo.master repo in
+  let* master = Store.master repo in
   let* () = Store.set ~info master [ "abc" ] "123" in
   let* res = Store.get master [ "abc" ] in
   assert (res = "123");

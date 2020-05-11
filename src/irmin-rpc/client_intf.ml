@@ -31,6 +31,10 @@ module type S = sig
 
     type hash
 
+    val master : repo -> t Lwt.t
+
+    val of_branch : repo -> branch -> t Lwt.t
+
     val get : t -> key -> contents Lwt.t
 
     val find : t -> key -> (contents option, [> `Msg of string ]) result Lwt.t
@@ -52,12 +56,6 @@ module type S = sig
       val remove : repo -> branch -> unit Lwt.t
 
       val set : repo -> branch -> commit -> unit Lwt.t
-    end
-
-    module Repo : sig
-      val master : repo -> t Lwt.t
-
-      val of_branch : repo -> branch -> t Lwt.t
     end
   end
 
