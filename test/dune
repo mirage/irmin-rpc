@@ -1,4 +1,4 @@
 (test
  (name test)
  (package irmin-rpc)
- (libraries alcotest alcotest-lwt irmin irmin-mem irmin-rpc lwt lwt.unix))
+ (libraries alcotest alcotest-lwt irmin irmin-mem irmin-rpc lwt lwt.unix capnp-rpc capnp-rpc-lwt fmt))

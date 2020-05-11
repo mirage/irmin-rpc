@@ -315,6 +315,12 @@ functor
     module Repo = struct
       type t = Raw.Client.Repo.t cap
 
+      module BranchMap = Map.Make (struct
+        type t = St.Branch.t
+
+        let compare = Irmin.Type.compare St.Branch.t
+      end)
+
       let local repo =
         let module Repo = Raw.Service.Repo in
         object
@@ -328,9 +334,9 @@ functor
               (module Results)
               (fun results ->
                 let+ store = St.master repo in
-                let master = Store.local store in
-                Capability.inc_ref master;
-                Results.store_set results (Some master);
+                let store_service = Store.local store in
+                Capability.inc_ref store_service;
+                Results.store_set results (Some store_service);
                 Ok ())
 
           method of_branch_impl params release_param_caps =
@@ -343,7 +349,9 @@ functor
               (fun results ->
                 let branch = branch |> Codec.Branch.decode |> unwrap in
                 let+ store = St.of_branch repo branch in
-                Results.store_set results (Some (Store.local store));
+                let store_service = Store.local store in
+                Capability.inc_ref store_service;
+                Results.store_set results (Some store_service);
                 Ok ())
 
           method branch_list_impl _params release_param_caps =
