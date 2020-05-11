@@ -56,8 +56,8 @@ functor
         let open Raw.Client.Repo.OfBranch in
         let req, p = Capability.Request.create Params.init_pointer in
         branch |> Codec.Branch.encode |> Params.branch_set p;
-        Capability.call_for_value_exn t method_id req
-        >|= (Results.store_get >> Option.get)
+        Capability.call_for_caps t method_id req Results.store_get_pipelined
+        |> Lwt.return
 
       let find t key =
         let open Raw.Client.Store.Find in
@@ -159,5 +159,5 @@ functor
       let open Raw.Client.Irmin.Heartbeat in
       let req, p = Capability.Request.create Params.init_pointer in
       Params.msg_set p msg;
-      Capability.call_for_value_exn t method_id req >|= Results.reply_get
+      Capability.call_for_value t method_id req >|= Result.map Results.reply_get
   end

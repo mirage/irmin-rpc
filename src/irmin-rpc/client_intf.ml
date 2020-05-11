@@ -61,7 +61,8 @@ module type S = sig
 
   val repo : t -> Store.repo Lwt.t
 
-  val heartbeat : t -> string -> string Lwt.t
+  val heartbeat :
+    t -> string -> (string, [> `Capnp of Capnp_rpc.Error.t ]) result Lwt.t
 end
 
 module type MAKER = functor
