@@ -46,6 +46,19 @@ functor
 
       type hash = Store.hash
 
+      let master t =
+        let open Raw.Client.Repo.Master in
+        let req = Capability.Request.create_no_args () in
+        Capability.call_for_caps t method_id req Results.store_get_pipelined
+        |> Lwt.return
+
+      let of_branch t branch =
+        let open Raw.Client.Repo.OfBranch in
+        let req, p = Capability.Request.create Params.init_pointer in
+        branch |> Codec.Branch.encode |> Params.branch_set p;
+        Capability.call_for_value_exn t method_id req
+        >|= (Results.store_get >> Option.get)
+
       let find t key =
         let open Raw.Client.Store.Find in
         let ( >>| ) x f = Result.map f x in
@@ -133,21 +146,6 @@ functor
           branch |> Codec.Branch.encode |> Params.branch_set p;
           Some commit |> Params.commit_set p;
           Capability.call_for_value_exn t method_id req >|= fun _res -> ()
-      end
-
-      module Repo = struct
-        let master t =
-          let open Raw.Client.Repo.Master in
-          let req = Capability.Request.create_no_args () in
-          Capability.call_for_value_exn t method_id req
-          >|= (Results.store_get >> Option.get)
-
-        let of_branch t branch =
-          let open Raw.Client.Repo.OfBranch in
-          let req, p = Capability.Request.create Params.init_pointer in
-          branch |> Codec.Branch.encode |> Params.branch_set p;
-          Capability.call_for_value_exn t method_id req
-          >|= (Results.store_get >> Option.get)
       end
     end
 
