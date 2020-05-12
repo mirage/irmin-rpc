@@ -12,15 +12,26 @@ module Make
 
     val uri : t -> Uri.t
 
-    val create :
+    val serve :
       ?backlog:int ->
+      ?switch:Lwt_switch.t ->
+      ?secure:bool ->
       secret_key:[< `File of string | `PEM of string | `Ephemeral ] ->
-      ?serve_tls:bool ->
       Capnp_rpc_unix.Network.Location.t ->
       Store.repo ->
       t Lwt.t
+    (** Initialise an Irmin RPC server hosted at the given network location
+        serving data from the given repository.
 
-    val run : t -> unit Lwt.t
+        - Backlog is the maximal number of pending requests (passed to
+          {!Unix.listen}).
+
+        - If [secure] is true (default), the server performs a TLS handshake
+          using the provided [secret_key]. Otherwise, the server will accept any
+          unencrypted incoming connection.
+
+        - Turning off the supplied Lwt switch will terminate the server
+          asynchronously. *)
   end
 
   module Client : sig
