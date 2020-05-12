@@ -11,15 +11,7 @@ exception Error_message of string
 
 exception Remote_error of string
 
-[@@@warning "-32"]
-
-[@@@warning "-33"]
-
 let unwrap = function Ok x -> x | Error (`Msg m) -> raise (Error_message m)
-
-let error (`Capnp err) =
-  let s = Fmt.to_to_string Capnp_rpc.Error.pp err in
-  Error (`Msg s)
 
 let ( let* ) = Lwt.bind
 
