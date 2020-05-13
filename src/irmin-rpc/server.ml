@@ -65,12 +65,13 @@ functor
       | Error (`Commit_not_found h) ->
           Fmt.failwith "Commit not found: %a" (Irmin.Type.pp St.Hash.t) h
 
+    let convert_error pp =
+      Fmt.strf "%a" pp >> Capnp_rpc.Exception.v ~ty:`Failed >> fun e ->
+      `Capnp (`Exception e)
+
     let process_write_error =
       Lwt.map
-        (Result.map_error
-           ( Fmt.strf "%a" (Irmin.Type.pp St.write_error_t)
-           >> Capnp_rpc.Exception.v ~ty:`Failed
-           >> fun e -> `Capnp (`Exception e) ))
+        (Result.map_error (convert_error (Irmin.Type.pp St.write_error_t)))
 
     module Commit = struct
       type t = Raw.Client.Commit.t cap
@@ -186,7 +187,41 @@ functor
                 in
                 Ok ())
 
-          method pull_impl = todo
+          method pull_impl params release_param_caps =
+            let open Sync.Pull in
+            let endpoint = Params.endpoint_get params in
+            let info =
+              if Params.has_info params then
+                Some (Codec.Info.decode (Params.info_get params))
+              else None
+            in
+            release_param_caps ();
+            Logs.info (fun f -> f "Sync.pull");
+            with_initialised_results
+              (module Results)
+              (fun results ->
+                let remote =
+                  endpoint
+                  |> Codec.Endpoint.decode
+                  |> unwrap
+                  |> remote_of_endpoint
+                in
+                ( match info with
+                | Some info -> Sy.pull store remote (`Merge (fun () -> info))
+                | None -> Sy.pull store remote `Set )
+                >>= function
+                | Ok _ ->
+                    St.Head.find store >|= fun head ->
+                    let () =
+                      match head with
+                      | Some head ->
+                          let commit = Commit.local head in
+                          Results.result_set results (Some commit)
+                      | _ -> ()
+                    in
+                    Ok ()
+                | Error e ->
+                    Lwt.return @@ Error (convert_error Sy.pp_pull_error e))
 
           method clone_impl = todo
         end
@@ -318,7 +353,8 @@ functor
       module BranchMap = Map.Make (struct
         type t = St.Branch.t
 
-        let compare = Irmin.Type.compare St.Branch.t
+        let compare a b =
+          (Irmin.Type.unstage @@ Irmin.Type.compare St.Branch.t) a b
       end)
 
       let local repo =

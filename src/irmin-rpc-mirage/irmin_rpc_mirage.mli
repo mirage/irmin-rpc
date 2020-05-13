@@ -7,7 +7,8 @@ module Make
     (Pclock : Mirage_clock.PCLOCK)
     (Time : Mirage_time.S)
     (Stack : Mirage_stack.V4) : sig
-  module Dns : module type of Dns_client_mirage.Make (Random) (Mclock) (Stack)
+  module Dns :
+      module type of Dns_client_mirage.Make (Random) (Time) (Mclock) (Stack)
 
   module Server : sig
     include

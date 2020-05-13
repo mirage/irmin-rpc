@@ -5,4 +5,5 @@
 
 (alias
  (name runtest)
+ (package irmin-rpc-unix)
  (deps client.exe server.exe))

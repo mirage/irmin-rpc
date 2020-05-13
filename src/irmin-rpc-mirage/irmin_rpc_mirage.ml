@@ -10,7 +10,8 @@ module Make
     (Time : Mirage_time.S)
     (Stack : Mirage_stack.V4) =
 struct
-  module Capnp_rpc_mirage = Capnp_rpc_mirage.Make (Random) (Mclock) (Stack)
+  module Capnp_rpc_mirage =
+    Capnp_rpc_mirage.Make (Random) (Time) (Mclock) (Stack)
   module Dns = Capnp_rpc_mirage.Network.Dns
 
   module Server = struct

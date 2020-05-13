@@ -12,7 +12,8 @@ end
 (** Extended [TESTABLE]s for store types. *)
 module Alcotest = struct
   let of_typ (type a) (t : a Irmin.Type.t) : a Alcotest.testable =
-    Alcotest.testable (Irmin.Type.pp t) (Irmin.Type.equal t)
+    Alcotest.testable (Irmin.Type.pp t)
+      (Irmin.Type.unstage @@ Irmin.Type.equal t)
 
   let msg : [ `Msg of string ] Alcotest.testable =
     Alcotest.testable
