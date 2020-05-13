@@ -9,5 +9,6 @@ env:
     - ALCOTEST_SHOW_ERRORS=1
     - PINS="irmin.dev:--dev irmin-mem.dev:--dev irmin-fs.dev:--dev irmin-http.dev:--dev irmin-graphql.dev:https://github.com/mirage/irmin.git irmin-git.dev:--dev irmin-mirage.dev:--dev irmin-unix.dev:--dev irmin-rpc.dev:. irmin-rpc-unix.dev:. irmin-rpc-mirage.dev:."
   matrix:
+    - OCAML_VERSION=4.08 PACKAGE="irmin-rpc.dev" TESTS=true
     - OCAML_VERSION=4.08 PACKAGE="irmin-rpc-unix.dev" TESTS=false
     - OCAML_VERSION=4.08 PACKAGE="irmin-rpc-mirage.dev" TESTS=false
