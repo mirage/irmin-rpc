@@ -20,6 +20,7 @@ depends:
   "capnp"
   "capnp-rpc"
   "capnp-rpc-lwt"
+  "capnp-rpc-net"
   "cohttp"
   "fmt"
   "irmin" {>= "2.0.0"}
