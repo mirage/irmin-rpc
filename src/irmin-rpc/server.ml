@@ -161,7 +161,27 @@ functor
     module Sync = struct
       let remote_of_endpoint e = St.E e
 
-      let _local store =
+      module type RESULT_SET = sig
+        type t
+
+        val result_set : t -> Raw.Client.Commit.t cap option -> unit
+      end
+
+      let handle_pull (type t) (module Results : RESULT_SET with type t = t)
+          store results = function
+        | Ok _ ->
+            St.Head.find store >|= fun head ->
+            let () =
+              match head with
+              | Some head ->
+                  let commit = Commit.local head in
+                  Results.result_set results (Some commit)
+              | _ -> ()
+            in
+            Ok ()
+        | Error e -> Lwt.return @@ Error (convert_error Sy.pp_pull_error e)
+
+      let local store =
         let module Sync = Raw.Service.Sync in
         object
           inherit Sync.service
@@ -190,11 +210,7 @@ functor
           method pull_impl params release_param_caps =
             let open Sync.Pull in
             let endpoint = Params.endpoint_get params in
-            let info =
-              if Params.has_info params then
-                Some (Codec.Info.decode (Params.info_get params))
-              else None
-            in
+            let info = Codec.Info.decode (Params.info_get params) in
             release_param_caps ();
             Logs.info (fun f -> f "Sync.pull");
             with_initialised_results
@@ -206,24 +222,29 @@ functor
                   |> unwrap
                   |> remote_of_endpoint
                 in
-                ( match info with
-                | Some info -> Sy.pull store remote (`Merge (fun () -> info))
-                | None -> Sy.pull store remote `Set )
-                >>= function
-                | Ok _ ->
-                    St.Head.find store >|= fun head ->
-                    let () =
-                      match head with
-                      | Some head ->
-                          let commit = Commit.local head in
-                          Results.result_set results (Some commit)
-                      | _ -> ()
-                    in
-                    Ok ()
-                | Error e ->
-                    Lwt.return @@ Error (convert_error Sy.pp_pull_error e))
+                Sy.pull store remote (`Merge (fun () -> info))
+                >>= handle_pull
+                      (module Results : RESULT_SET with type t = Results.t)
+                      store results)
 
-          method clone_impl = todo
+          method clone_impl params release_param_caps =
+            let open Sync.Clone in
+            let endpoint = Params.endpoint_get params in
+            release_param_caps ();
+            Logs.info (fun f -> f "Sync.pull");
+            with_initialised_results
+              (module Results)
+              (fun results ->
+                let remote =
+                  endpoint
+                  |> Codec.Endpoint.decode
+                  |> unwrap
+                  |> remote_of_endpoint
+                in
+                Sy.pull store remote `Set
+                >>= handle_pull
+                      (module Results : RESULT_SET with type t = Results.t)
+                      store results)
         end
         |> Sync.local
     end
@@ -342,7 +363,14 @@ functor
                 in
                 Ok ())
 
-          method sync_impl = todo
+          method sync_impl _params release_param_caps =
+            let open Store.Sync in
+            release_param_caps ();
+            with_initialised_results
+              (module Results)
+              (fun results ->
+                Results.sync_set results (Some (Sync.local store));
+                Lwt.return @@ Ok ())
         end
         |> Store.local
     end
@@ -371,7 +399,6 @@ functor
               (fun results ->
                 let+ store = St.master repo in
                 let store_service = Store.local store in
-                Capability.inc_ref store_service;
                 Results.store_set results (Some store_service);
                 Ok ())
 
@@ -386,7 +413,6 @@ functor
                 let branch = branch |> Codec.Branch.decode |> unwrap in
                 let+ store = St.of_branch repo branch in
                 let store_service = Store.local store in
-                Capability.inc_ref store_service;
                 Results.store_set results (Some store_service);
                 Ok ())
 

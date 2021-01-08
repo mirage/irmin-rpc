@@ -8,6 +8,8 @@ module Types = struct
   type repo = Raw.Client.Repo.t Capability.t
 
   type commit = Raw.Client.Commit.t Capability.t
+
+  type sync = Raw.Client.Sync.t Capability.t
 end
 
 module type S = sig
@@ -31,6 +33,8 @@ module type S = sig
 
     type hash
 
+    type sync
+
     val master : repo -> t Lwt.t
 
     val of_branch : repo -> branch -> t Lwt.t
@@ -50,12 +54,28 @@ module type S = sig
     val merge_with_branch :
       t -> info:Info.f -> branch -> (unit, Merge.conflict) result Lwt.t
 
+    val sync : t -> sync Lwt.t
+
     module Branch : sig
       val list : repo -> branch list Lwt.t
 
       val remove : repo -> branch -> unit Lwt.t
 
       val set : repo -> branch -> commit -> unit Lwt.t
+    end
+
+    module Sync : sig
+      type endpoint
+
+      val clone : sync -> endpoint -> commit Lwt.t
+
+      val pull : sync -> info:Irmin.Info.f -> endpoint -> commit Lwt.t
+
+      val push :
+        sync ->
+        endpoint ->
+        ([ `Empty | `Head of hash ], [ `Detached_head | `Msg of string ]) result
+        Lwt.t
     end
   end
 
@@ -75,6 +95,7 @@ module type MAKER = functor
      and type Store.key = Store.key
      and type Store.contents = Store.contents
      and type Store.hash = Store.hash
+     and type Store.Sync.endpoint = Endpoint_codec.t
 
 module type Client = sig
   module type S = S

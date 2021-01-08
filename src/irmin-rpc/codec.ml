@@ -197,8 +197,8 @@ module Make (Store : Irmin.S) = struct
           ok_empty_set b;
           Lwt.return b
       | Ok (`Head c) ->
-          c |> Commit.encode >|= ok_head_set_builder b
-          >|= fun (_ : Raw.Builder.Commit.Value.t) -> b
+          Store.Commit.hash c |> Hash.encode |> ok_head_set b;
+          Lwt.return b
       | Error `Detached_head ->
           error_detached_head_set b;
           Lwt.return b

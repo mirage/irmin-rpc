@@ -80,7 +80,7 @@ functor
       let set ~info t key contents =
         let open Raw.Client.Store.Set in
         let req, p = Capability.Request.create Params.init_pointer in
-        Codec.Key.encode key |> Params.key_set p;
+        Params.key_set p (Codec.Key.encode key);
         let (_ : Raw.Builder.Info.t) =
           info () |> Codec.Info.encode |> Params.info_set_builder p
         in
@@ -118,6 +118,12 @@ functor
         Capability.call_for_value_exn t method_id req
         >|= (Results.result_get >> Codec.Merge_result.decode >> unwrap)
 
+      let sync t =
+        let open Raw.Client.Store.Sync in
+        let req = Capability.Request.create_no_args () in
+        Capability.call_for_caps t method_id req Results.sync_get_pipelined
+        |> Lwt.return
+
       module Branch = struct
         let list t =
           let open Raw.Client.Repo.BranchList in
@@ -136,16 +142,56 @@ functor
           let open Raw.Client.Repo.BranchSet in
           let req, p = Capability.Request.create Params.init_pointer in
           branch |> Codec.Branch.encode |> Params.branch_set p;
-          Some commit |> Params.commit_set p;
+          Params.commit_set p (Some commit);
           Capability.call_for_value_exn t method_id req >|= fun _res -> ()
+      end
+
+      module Sync = struct
+        type endpoint = Endpoint_codec.t
+
+        let clone t endpoint =
+          let open Raw.Client.Sync.Clone in
+          let req, p = Capability.Request.create Params.init_pointer in
+          Params.endpoint_set p (Endpoint_codec.encode endpoint);
+          Capability.call_for_caps t method_id req Results.result_get_pipelined
+          |> Lwt.return
+
+        let pull t ~info endpoint =
+          let open Raw.Client.Sync.Pull in
+          let req, p = Capability.Request.create Params.init_pointer in
+          Params.endpoint_set p (Endpoint_codec.encode endpoint);
+          let _ = Params.info_set_builder p (Codec.Info.encode @@ info ()) in
+          Capability.call_for_caps t method_id req Results.result_get_pipelined
+          |> Lwt.return
+
+        let decode_push_result t =
+          let open Raw.Reader.Sync.PushResult in
+          match get t with
+          | OkEmpty -> Lwt.return @@ Ok `Empty
+          | OkHead head ->
+              let hash : hash = Codec.Hash.decode head |> unwrap in
+              Lwt.return @@ Ok (`Head hash)
+          | ErrorDetachedHead -> Lwt.return @@ Error `Detached_head
+          | ErrorMsg msg -> Lwt.return @@ Error (`Msg msg)
+          | Undefined _ -> Lwt.return @@ Error (`Msg "Undefined")
+
+        let push t endpoint =
+          let open Raw.Client.Sync.Push in
+          let req, p = Capability.Request.create Params.init_pointer in
+          Params.endpoint_set p (Endpoint_codec.encode endpoint);
+          let* (x : Results.t) =
+            Capability.call_for_value_exn t method_id req
+          in
+          let x = Results.result_get x in
+          decode_push_result x
       end
     end
 
     let repo t =
       let open Raw.Client.Irmin.Repo in
       let req = Capability.Request.create_no_args () in
-      Capability.call_for_value_exn t method_id req
-      >|= (Results.repo_get >> Option.get)
+      Capability.call_for_caps t method_id req Results.repo_get_pipelined
+      |> Lwt.return
 
     let heartbeat t msg =
       let open Raw.Client.Irmin.Heartbeat in

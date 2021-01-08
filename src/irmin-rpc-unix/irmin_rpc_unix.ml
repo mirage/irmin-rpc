@@ -1,22 +1,12 @@
 open Lwt.Infix
 
 module Git_unix_endpoint_codec = struct
-  type t = Git_unix.endpoint
+  type t = Mimic.ctx * Smart_git.Endpoint.t
 
-  let encode Git_unix.{ uri; headers } =
-    let open Sexplib0.Sexp_conv in
-    (Uri.to_string uri, headers)
-    |> sexp_of_pair sexp_of_string Cohttp.Header.sexp_of_t
-    |> Sexplib0.Sexp.to_string
+  let encode (_, endpoint) = Fmt.to_to_string Smart_git.Endpoint.pp endpoint
 
   let decode str =
-    let open Sexplib0.Sexp_conv in
-    let uri_string, headers =
-      str
-      |> sexp_of_string
-      |> pair_of_sexp string_of_sexp Cohttp.Header.t_of_sexp
-    in
-    Ok Git_unix.{ uri = Uri.of_string uri_string; headers }
+    Result.map (fun x -> (Mimic.empty, x)) @@ Smart_git.Endpoint.of_string str
 end
 
 module Make

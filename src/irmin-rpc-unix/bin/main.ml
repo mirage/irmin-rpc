@@ -1,11 +1,9 @@
-open Lwt.Infix
 open Cmdliner
+open Lwt.Infix
 
-let config path =
-  let head = Git.Reference.of_string "refs/heads/master" in
-  Irmin_git.config ~head path
+let config path = Irmin_git.config path
 
-let run host port (Irmin_unix.Resolver.S ((module Store), store, _)) secret_key
+let run (Irmin_unix.Resolver.S ((module Store), store, _)) host port secret_key
     address_file =
   let module Rpc =
     Irmin_rpc_unix.Make
@@ -81,9 +79,9 @@ let address_file =
 let main_t =
   Term.(
     const run
+    $ Irmin_unix.Resolver.store
     $ host
     $ port
-    $ Irmin_unix.Resolver.store
     $ secret_key
     $ address_file)
 

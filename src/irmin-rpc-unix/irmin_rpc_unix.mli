@@ -1,5 +1,5 @@
 module Git_unix_endpoint_codec :
-  Irmin_rpc.Codec.SERIALISABLE with type t = Git_unix.endpoint
+  Irmin_rpc.Codec.SERIALISABLE with type t = Mimic.ctx * Smart_git.Endpoint.t
 
 module Make
     (Store : Irmin.S)

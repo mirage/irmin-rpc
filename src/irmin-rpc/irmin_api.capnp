@@ -39,15 +39,15 @@ interface Sync {
   struct PushResult {
     union {
       okEmpty            @0  :Void;
-      okHead             @1  :Commit.Value;
+      okHead             @1  :Data;
       errorDetachedHead  @2  :Void;
       errorMsg           @3  :Text;
     }
   }
 
-  push   @0  (branch :Text, endpoint :Data) -> (result :PushResult);
-  pull   @1  (branch :Text, endpoint :Data, info :Info) -> (result :Commit);
-  clone  @2  (branch :Text, endpoint :Data) -> (result :Commit);
+  push   @0  (endpoint :Data) -> (result :PushResult);
+  pull   @1  (endpoint :Data, info :Info) -> (result :Commit);
+  clone  @2  (endpoint :Data) -> (result :Commit);
 }
 
 interface Store {

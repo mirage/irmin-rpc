@@ -6,12 +6,12 @@ module Rpc =
     (Irmin_rpc_unix.Git_unix_endpoint_codec)
 module Store = Rpc.Client.Store
 
-(* This was printed when running the server example *)
-let uri =
-  "capnp://sha-256:HUOdhEKv0Knk5USkfaFiXCC_l_s3dYjoayyrmu_olh4@127.0.0.1:9999/yxEIPPXH-w8pTd_ULcm4AmUsZwA5QrSfSZj_z_Vzulw"
+(* This was printed when running the server example
+ * Something like: "capnp://sha-256:QZVBfR2-8g6nfK7cRrD763Usn5Fg0j2muRXk62BhYKI@127.0.0.1:9998/yGlvMAKwxOw4B3lYe0g9XCuV4o5cp9BOQENvSvZNpjU" *)
+let uri = Sys.argv.(1)
 
 let info () =
-  Irmin.Info.v ~date:0L ~author:"rpc-client-author" "rpc-client-message"
+  Irmin_unix.info ~author:"rpc-client-author" "rpc-client-message" ()
 
 let ( let* ) = Lwt.bind
 
