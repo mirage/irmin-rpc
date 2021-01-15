@@ -146,6 +146,40 @@ functor
           Capability.call_for_value_exn t method_id req >|= fun _res -> ()
       end
 
+      module Commit = struct
+        let of_hash repo hash : commit option Lwt.t =
+          let open Raw.Client.Repo.CommitOfHash in
+          let req, p = Capability.Request.create Params.init_pointer in
+          Params.hash_set p (Codec.Hash.encode hash);
+          Capability.call_for_value_exn repo method_id req
+          >|= Results.commit_get
+
+        let hash commit =
+          let open Raw.Client.Commit.Hash in
+          let req = Capability.Request.create_no_args () in
+          Capability.call_for_value_exn commit method_id req >|= fun res ->
+          Results.hash_get res |> Codec.Hash.decode |> Result.get_ok
+
+        let info commit =
+          let open Raw.Client.Commit.Info in
+          let req = Capability.Request.create_no_args () in
+          Capability.call_for_value_exn commit method_id req >|= fun res ->
+          Results.info_get res |> Codec.Info.decode
+
+        let tree commit =
+          let open Raw.Client.Commit.Tree in
+          let req = Capability.Request.create_no_args () in
+          Capability.call_for_value_exn commit method_id req >|= fun res ->
+          Results.tree_get res |> Codec.Tree.decode
+
+        let parents commit =
+          let open Raw.Client.Commit.Parents in
+          let req = Capability.Request.create_no_args () in
+          Capability.call_for_value_exn commit method_id req >|= fun res ->
+          Results.hashes_get_list res
+          |> List.map (fun x -> Codec.Hash.decode x |> Result.get_ok)
+      end
+
       module Sync = struct
         type endpoint = Endpoint_codec.t
 
@@ -193,9 +227,8 @@ functor
       Capability.call_for_caps t method_id req Results.repo_get_pipelined
       |> Lwt.return
 
-    let heartbeat t msg =
-      let open Raw.Client.Irmin.Heartbeat in
-      let req, p = Capability.Request.create Params.init_pointer in
-      Params.msg_set p msg;
-      Capability.call_for_value t method_id req >|= Result.map Results.reply_get
+    let ping t =
+      let open Raw.Client.Irmin.Ping in
+      let req = Capability.Request.create_no_args () in
+      Capability.call_for_value t method_id req >|= Result.map (fun _ -> ())
   end

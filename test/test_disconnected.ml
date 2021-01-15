@@ -45,9 +45,9 @@ let test_case name (fn : ctx -> unit Lwt.t) =
 
 (** Test cases *)
 
-let test_heartbeat { irmin; _ } =
+let test_ping { irmin; _ } =
   let* () =
-    RPC.Client.heartbeat irmin "foo"
+    RPC.Client.ping irmin
     >|= Alcotest.(check (result reject capnp_error))
           "Error case"
           (Error (`Capnp (`Exception broken_exception)))
@@ -68,7 +68,7 @@ let test_of_branch { repo; _ } =
 
 let suite =
   [
-    test_case "Irmin.heartbeat" test_heartbeat;
+    test_case "Irmin.ping" test_ping;
     test_case "Store.master" test_master;
     test_case "Store.of_branch" test_of_branch;
   ]

@@ -64,6 +64,18 @@ module type S = sig
       val set : repo -> branch -> commit -> unit Lwt.t
     end
 
+    module Commit : sig
+      val of_hash : repo -> hash -> commit option Lwt.t
+
+      val hash : commit -> hash Lwt.t
+
+      val info : commit -> Irmin.Info.t Lwt.t
+
+      val parents : commit -> hash list Lwt.t
+
+      val tree : commit -> tree Lwt.t
+    end
+
     module Sync : sig
       type endpoint
 
@@ -81,8 +93,7 @@ module type S = sig
 
   val repo : t -> Store.repo Lwt.t
 
-  val heartbeat :
-    t -> string -> (string, [> `Capnp of Capnp_rpc.Error.t ]) result Lwt.t
+  val ping : t -> (unit, [> `Capnp of Capnp_rpc.Error.t ]) result Lwt.t
 end
 
 module type MAKER = functor

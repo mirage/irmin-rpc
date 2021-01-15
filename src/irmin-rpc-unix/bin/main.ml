@@ -1,7 +1,14 @@
 open Cmdliner
 open Lwt.Infix
 
-let config path = Irmin_git.config path
+let () =
+  Logs.set_level (Some Logs.Info);
+  Logs.set_reporter (Logs_fmt.reporter ())
+
+let config path =
+  print_endline path;
+  let head = Git.Reference.of_string "refs/heads/master" |> Result.get_ok in
+  Irmin_git.config ~head path
 
 let run (Irmin_unix.Resolver.S ((module Store), store, _)) host port secret_key
     address_file =
@@ -48,19 +55,6 @@ let host =
 let port =
   let doc = "Port to listen on" in
   Arg.(value & opt int 9998 & info [ "p"; "port" ] ~docv:"PORT" ~doc)
-
-let contents =
-  let doc = "Content type" in
-  Arg.(
-    value & opt string "string" & info [ "c"; "contents" ] ~docv:"CONTENTS" ~doc)
-
-let store =
-  let doc = "Store type" in
-  Arg.(value & opt string "git" & info [ "s"; "store" ] ~docv:"STORE" ~doc)
-
-let root =
-  let doc = "Store location" in
-  Arg.(value & opt string "/tmp/irmin" & info [ "root" ] ~docv:"PATH" ~doc)
 
 let secret_key =
   let doc = "Secret key" in

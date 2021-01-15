@@ -16,12 +16,6 @@ module type MAKER = MAKER
 module Log = ( val Logs.src_log (Logs.Src.create "irmin.rpc" ~doc:"Irmin RPC")
                  : Logs.LOG )
 
-let todo _ = failwith "TODO: unimplemented RPC endpoint"
-
-(* let error m =
- *   let err = Capnp_rpc.Exception.v ~ty:`Failed m in
- *   Error (`Capnp (`Exception err)) *)
-
 let ignore_result_set r =
   ignore (r : (Irmin_api.rw, string, Raw.Reader.builder_array_t) Capnp.Array.t)
 
@@ -35,8 +29,6 @@ let with_initialised_results (type t) (module Results : RESULTS with type t = t)
     f =
   let response, results = Service.Response.create Results.init_pointer in
   Service.return_lwt (fun () -> f results >|= Result.map (fun () -> response))
-
-(* let wrap_implementation (Results: ) *)
 
 module Make : MAKER =
 functor
@@ -231,7 +223,7 @@ functor
             let open Sync.Clone in
             let endpoint = Params.endpoint_get params in
             release_param_caps ();
-            Logs.info (fun f -> f "Sync.pull");
+            Logs.info (fun f -> f "Sync.clone");
             with_initialised_results
               (module Results)
               (fun results ->
@@ -366,6 +358,7 @@ functor
           method sync_impl _params release_param_caps =
             let open Store.Sync in
             release_param_caps ();
+            Logs.info (fun f -> f "Store.sync");
             with_initialised_results
               (module Results)
               (fun results ->
@@ -475,6 +468,7 @@ functor
         method repo_impl _params release_param_caps =
           let open I.Repo in
           release_param_caps ();
+          Logs.info (fun f -> f "Irmin.repo");
           let response, results =
             Service.Response.create Results.init_pointer
           in
@@ -482,7 +476,11 @@ functor
           Results.repo_set results (Some repo_service);
           Service.return response
 
-        method heartbeat_impl = todo
+        method ping_impl _params release_param_caps =
+          release_param_caps ();
+          Logs.info (fun f -> f "Irmin.ping");
+          let response = Service.Response.create_empty () in
+          Service.return response
       end
       |> I.local
   end
