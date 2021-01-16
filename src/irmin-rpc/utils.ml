@@ -32,3 +32,15 @@ module String = struct
 
   include String
 end
+
+let log_key (type k) (module Store : Irmin.S with type key = k) s (key : k) =
+  if Store.Key.is_empty key then Logs.info (fun l -> l "%s: /" s)
+  else Logs.info (fun l -> l "%s: %a" s (Irmin.Type.pp Store.Key.t) key)
+
+let log_key_result (type k) (module Store : Irmin.S with type key = k) s
+    (key : (k, 'b) result) =
+  match key with
+  | Ok key ->
+      if Store.Key.is_empty key then Logs.info (fun l -> l "%s: /" s)
+      else Logs.info (fun l -> l "%s: %a" s (Irmin.Type.pp Store.Key.t) key)
+  | Error (`Msg e) -> Logs.err (fun l -> l "Invalid key: %s" e)

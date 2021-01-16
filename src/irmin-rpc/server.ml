@@ -251,15 +251,14 @@ functor
 
           method find_impl params release_param_caps =
             let open Store.Find in
-            let key = Params.key_get params in
+            let key = Params.key_get params |> Codec.Key.decode in
             release_param_caps ();
-            Logs.info (fun f -> f "Store.find");
+            log_key_result (module St) "Store.find" key;
             with_initialised_results
               (module Results)
               (fun results ->
-                let key = Codec.Key.decode key |> unwrap in
                 let+ () =
-                  St.find store key
+                  St.find store (unwrap key)
                   >|= Option.iter
                         (Codec.Contents.encode >> Results.contents_set results)
                 in
@@ -267,15 +266,14 @@ functor
 
           method find_tree_impl params release_param_caps =
             let open Store.FindTree in
-            let key = Params.key_get params in
+            let key = Params.key_get params |> Codec.Key.decode in
             release_param_caps ();
-            Logs.info (fun f -> f "Store.find_tree");
+            log_key_result (module St) "Store.find_tree" key;
             with_initialised_results
               (module Results)
               (fun results ->
-                let key = Codec.Key.decode key |> unwrap in
                 let+ () =
-                  St.find_tree store key
+                  St.find_tree store (unwrap key)
                   >>= Option.iter_lwt (fun tree ->
                           tree
                           |> Codec.Tree.encode
@@ -286,48 +284,46 @@ functor
 
           method set_impl params release_param_caps =
             let open Store.Set in
-            let key = Params.key_get params
-            and info = Params.info_get params
+            let key = Params.key_get params |> Codec.Key.decode in
+            let info = Params.info_get params
             and contents = Params.contents_get params in
             release_param_caps ();
-            Logs.info (fun f -> f "Store.set");
+            log_key_result (module St) "Store.set" key;
             Service.return_lwt (fun () ->
-                let key = key |> Codec.Key.decode |> unwrap
-                and info = info |> Codec.Info.decode
+                let info = info |> Codec.Info.decode
                 and contents = contents |> Codec.Contents.decode |> unwrap in
                 let+! () =
-                  St.set ~info:(fun () -> info) store key contents
+                  St.set ~info:(fun () -> info) store (unwrap key) contents
                   |> process_write_error
                 in
                 Service.Response.create_empty ())
 
           method set_tree_impl params release_param_caps =
             let open Store.SetTree in
-            let key = Params.key_get params
-            and info = Params.info_get params
+            let key = Params.key_get params |> Codec.Key.decode in
+            let info = Params.info_get params
             and tree = Params.tree_get params in
             release_param_caps ();
-            Logs.info (fun f -> f "Store.set_tree");
+            log_key_result (module St) "Store.set_tree" key;
             Service.return_lwt (fun () ->
-                let key = key |> Codec.Key.decode |> unwrap
-                and info = info |> Codec.Info.decode
+                let info = info |> Codec.Info.decode
                 and tree = tree |> Codec.Tree.decode in
                 let+! () =
-                  St.set_tree ~info:(fun () -> info) store key tree
+                  St.set_tree ~info:(fun () -> info) store (unwrap key) tree
                   |> process_write_error
                 in
                 Service.Response.create_empty ())
 
           method remove_impl params release_param_caps =
             let open Store.Remove in
-            let key = Params.key_get params and info = Params.info_get params in
+            let key = Params.key_get params |> Codec.Key.decode
+            and info = Params.info_get params in
             release_param_caps ();
-            Logs.info (fun f -> f "Store.remove");
+            log_key_result (module St) "Store.remove" key;
             Service.return_lwt (fun () ->
-                let key = key |> Codec.Key.decode |> unwrap
-                and info = info |> Codec.Info.decode in
+                let info = info |> Codec.Info.decode in
                 let+! () =
-                  St.remove ~info:(fun () -> info) store key
+                  St.remove ~info:(fun () -> info) store (unwrap key)
                   |> process_write_error
                 in
                 Service.Response.create_empty ())
@@ -337,7 +333,7 @@ functor
             let branch = Params.branch_get params
             and info = Params.info_get params in
             release_param_caps ();
-            Logs.info (fun f -> f "Store.merge_into");
+            Logs.info (fun f -> f "Store.merge_into: :%s" branch);
             with_initialised_results
               (module Results)
               (fun results ->
@@ -364,6 +360,20 @@ functor
               (fun results ->
                 Results.sync_set results (Some (Sync.local store));
                 Lwt.return @@ Ok ())
+
+          method last_modified_impl params release_param_caps =
+            let open Store.LastModified in
+            let key = Params.key_get params |> Codec.Key.decode in
+            release_param_caps ();
+            log_key_result (module St) "Store.last_modified" key;
+            with_initialised_results
+              (module Results)
+              (fun results ->
+                St.last_modified ~n:1 store (unwrap key) >|= function
+                | [] -> Ok ()
+                | x :: _ ->
+                    Results.commit_set results (Some (Commit.local x));
+                    Ok ())
         end
         |> Store.local
     end

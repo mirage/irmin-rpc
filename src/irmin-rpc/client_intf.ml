@@ -56,6 +56,8 @@ module type S = sig
 
     val sync : t -> sync Lwt.t
 
+    val last_modified : t -> key -> commit option Lwt.t
+
     module Branch : sig
       val list : repo -> branch list Lwt.t
 

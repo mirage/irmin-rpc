@@ -1,20 +1,12 @@
 opam-version: "2.0"
+synopsis: "Cap'n Proto RPC client/server for Irmin"
 maintainer: "Zach Shipko <zachshipko@gmail.com>"
-authors: ["Zach Shipko <zachshipko@gmail.com>"]
+authors: "Zach Shipko <zachshipko@gmail.com>"
 license: "ISC"
 homepage: "https://github.com/mirage/irmin-rpc"
 doc: "https://mirage.github.io/irmin-rpc/doc"
-dev-repo: "git://github.com:mirage/irmin-rpc"
 bug-reports: "https://github.com/mirage/irmin-rpc/issues"
-
-build: [
-  ["dune" "subst"] {pinned}
-  ["dune" "build" "-p" name "-j" jobs]
-  ["dune" "runtest" "-p" name] {with-test}
-]
-
-depends:
-[
+depends: [
   "ocaml" {>= "4.08.0"}
   "dune" {>= "2.0.0"}
   "capnp-rpc"
@@ -27,11 +19,19 @@ depends:
   "lwt"
   "sexplib0"
   "uri"
-  "alcotest-lwt" {with-test & >= "1.1.0"}
+  "alcotest-lwt" {with-test & >= "1.0.0"}
+  "checkseum" {>= "0.3.0"}
+  "cmdliner" {>= "1.0.4"}
+  "cohttp" {>= "2.0.0"}
+  "digestif" {>= "0.9.0"}
+  "git" {>= "3.0.0"}
+  "git-unix" {>= "3.0.0"}
+  "irmin-git" {>= "2.3.0"}
+  "irmin-mem" {>= "2.3.0" & with-test}
 ]
-
-synopsis: "Cap'n Proto RPC client/server for Irmin"
-
-pin-depends: [
-  "irmin.dev" "git+https://github.com/mirage/irmin#f03df3dc5132b537456e72512ac804ddb444bb87"
+build: [
+  ["dune" "subst"] {pinned}
+  ["dune" "build" "-p" name "-j" jobs]
+  ["dune" "runtest" "-p" name] {with-test}
 ]
+dev-repo: "git+ssh://github.com/mirage/irmin-rpc"

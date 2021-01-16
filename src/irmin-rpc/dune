@@ -2,8 +2,8 @@
  (name irmin_rpc)
  (public_name irmin-rpc)
  (flags :standard -w -53-55)
- (libraries capnp capnp-rpc capnp-rpc-lwt capnp-rpc-net cohttp fmt repr irmin lwt
-   result stdint logs))
+ (libraries capnp capnp-rpc capnp-rpc-lwt capnp-rpc-net cohttp fmt repr irmin
+   lwt result stdint logs))
 
 (rule
  (targets irmin_api.ml irmin_api.mli)

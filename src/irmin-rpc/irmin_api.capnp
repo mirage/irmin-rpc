@@ -56,11 +56,11 @@ interface Sync {
 }
 
 interface Store {
-  find      @0  (key :Text) -> (contents :Contents);
-  findTree  @1  (key :Text) -> (tree :Tree);
-  set       @2  (key :Text, info :Info, contents :Contents) -> ();
-  setTree   @3  (key :Text, info :Info, tree :Tree) -> ();
-  remove    @4  (key :Text, info :Info) -> ();
+  find      @0  (key :Key) -> (contents :Contents);
+  findTree  @1  (key :Key) -> (tree :Tree);
+  set       @2  (key :Key, info :Info, contents :Contents) -> ();
+  setTree   @3  (key :Key, info :Info, tree :Tree) -> ();
+  remove    @4  (key :Key, info :Info) -> ();
 
   # Merge API on stores
   struct MergeResult {
@@ -73,6 +73,7 @@ interface Store {
   mergeWithBranch  @5  (branch :Text, info :Info) -> (result :MergeResult);
 
   sync  @6  () -> (sync :Sync);
+  lastModified  @7 (key :Key) -> (commit :Commit);
 }
 
 interface Repo {
