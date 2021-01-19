@@ -1,13 +1,10 @@
 open Server_intf
 open Capnp_rpc_lwt
+open Lwt.Syntax
 open Lwt.Infix
 open Utils
 
-let ( let+ ) x f = Lwt.map f x
-
 let ( let+! ) x f = Lwt.map (Result.map f) x
-
-let ( let* ) = Lwt.bind
 
 module type S = S
 
@@ -28,20 +25,33 @@ end
 let with_initialised_results (type t) (module Results : RESULTS with type t = t)
     f =
   let response, results = Service.Response.create Results.init_pointer in
-  Service.return_lwt (fun () -> f results >|= Result.map (fun () -> response))
+  Service.return_lwt (fun () ->
+      let+ x = f results in
+      Result.map (fun () -> response) x)
 
 module Make : MAKER =
 functor
   (St : Irmin.S)
-  (Endpoint_codec : Codec.SERIALISABLE with type t = St.Private.Sync.endpoint)
+  (Remote : Config_intf.REMOTE with type t = St.Private.Sync.endpoint)
+  (Pack : Config_intf.PACK with type repo = St.repo)
   ->
   struct
-    module Sy = Irmin.Sync (St)
+    module P = Pack
 
-    module Codec = struct
-      include Codec.Make (St)
-      module Endpoint = Endpoint_codec
-    end
+    let remote =
+      match Remote.v with
+      | Some x -> x
+      | None ->
+          ( module struct
+            type t = St.Private.Sync.endpoint
+
+            let decode _ = assert false
+
+            let encode _ = assert false
+          end )
+
+    module Sy = Irmin.Sync (St)
+    module Codec = Codec.Make (St)
 
     type repo = St.repo
 
@@ -71,10 +81,8 @@ functor
       let read repo t =
         let open Raw.Client.Commit.Read in
         let req = Capability.Request.create_no_args () in
-        let* str =
-          Capability.call_for_value_exn t method_id req >|= Results.value_get
-        in
-        Codec.Commit.decode repo str
+        let* str = Capability.call_for_value_exn t method_id req in
+        Codec.Commit.decode repo (Results.value_get str)
 
       let local commit =
         let module Commit = Raw.Service.Commit in
@@ -150,6 +158,45 @@ functor
         |> Commit.local
     end
 
+    module Pack = struct
+      let local repo =
+        let (module P) = Option.get Pack.v in
+        let repo : P.repo = Obj.magic repo in
+        let module Pack = Raw.Service.Pack in
+        object
+          inherit Pack.service
+
+          method integrity_check_impl params release_param_caps =
+            let open Pack.IntegrityCheck in
+            let auto_repair = Params.auto_repair_get params in
+            release_param_caps ();
+            with_initialised_results
+              (module Results)
+              (fun results ->
+                let chk = P.integrity_check ~auto_repair repo in
+                let inner =
+                  Raw.Builder.Pack.IntegrityCheckResult.init_root ()
+                in
+                let () =
+                  match chk with
+                  | Ok `No_error ->
+                      Raw.Builder.Pack.IntegrityCheckResult.no_error_set inner
+                  | Ok (`Fixed n) ->
+                      Raw.Builder.Pack.IntegrityCheckResult.fixed_set_int inner
+                        n
+                  | Error (`Corrupted n) ->
+                      Raw.Builder.Pack.IntegrityCheckResult.corrupted_set_int
+                        inner n
+                  | Error (`Cannot_fix m) ->
+                      Raw.Builder.Pack.IntegrityCheckResult.cannot_fix_set inner
+                        m
+                in
+                ignore (Results.result_set_builder results inner);
+                Lwt.return @@ Ok ())
+        end
+        |> Pack.local
+    end
+
     module Sync = struct
       let remote_of_endpoint e = St.E e
 
@@ -167,7 +214,8 @@ functor
               match head with
               | Some head ->
                   let commit = Commit.local head in
-                  Results.result_set results (Some commit)
+                  Results.result_set results (Some commit);
+                  Capability.dec_ref commit
               | _ -> ()
             in
             Ok ()
@@ -183,14 +231,12 @@ functor
             let endpoint = Params.endpoint_get params in
             release_param_caps ();
             Logs.info (fun f -> f "Sync.push");
+            let (module Remote) = remote in
             with_initialised_results
               (module Results)
               (fun results ->
                 let remote =
-                  endpoint
-                  |> Codec.Endpoint.decode
-                  |> unwrap
-                  |> remote_of_endpoint
+                  endpoint |> Remote.decode |> unwrap |> remote_of_endpoint
                 in
                 let+ (_ : Raw.Builder.Sync.PushResult.t) =
                   Sy.push store remote
@@ -205,14 +251,12 @@ functor
             let info = Codec.Info.decode (Params.info_get params) in
             release_param_caps ();
             Logs.info (fun f -> f "Sync.pull");
+            let (module Remote) = remote in
             with_initialised_results
               (module Results)
               (fun results ->
                 let remote =
-                  endpoint
-                  |> Codec.Endpoint.decode
-                  |> unwrap
-                  |> remote_of_endpoint
+                  endpoint |> Remote.decode |> unwrap |> remote_of_endpoint
                 in
                 Sy.pull store remote (`Merge (fun () -> info))
                 >>= handle_pull
@@ -224,14 +268,12 @@ functor
             let endpoint = Params.endpoint_get params in
             release_param_caps ();
             Logs.info (fun f -> f "Sync.clone");
+            let (module Remote) = remote in
             with_initialised_results
               (module Results)
               (fun results ->
                 let remote =
-                  endpoint
-                  |> Codec.Endpoint.decode
-                  |> unwrap
-                  |> remote_of_endpoint
+                  endpoint |> Remote.decode |> unwrap |> remote_of_endpoint
                 in
                 Sy.pull store remote `Set
                 >>= handle_pull
@@ -257,11 +299,11 @@ functor
             with_initialised_results
               (module Results)
               (fun results ->
-                let+ () =
-                  St.find store (unwrap key)
-                  >|= Option.iter
-                        (Codec.Contents.encode >> Results.contents_set results)
-                in
+                let+ x = St.find store (unwrap key) in
+                Option.iter
+                  (fun x ->
+                    Codec.Contents.encode x |> Results.contents_set results)
+                  x;
                 Ok ())
 
           method find_tree_impl params release_param_caps =
@@ -328,6 +370,30 @@ functor
                 in
                 Service.Response.create_empty ())
 
+          method mem_impl params release_param_caps =
+            let open Store.Mem in
+            let key = Params.key_get params |> Codec.Key.decode in
+            release_param_caps ();
+            log_key_result (module St) "Store.mem" key;
+            with_initialised_results
+              (module Results)
+              (fun results ->
+                St.mem store (unwrap key) >|= fun exists ->
+                Results.exists_set results exists;
+                Ok ())
+
+          method mem_tree_impl params release_param_caps =
+            let open Store.MemTree in
+            let key = Params.key_get params |> Codec.Key.decode in
+            release_param_caps ();
+            log_key_result (module St) "Store.mem" key;
+            with_initialised_results
+              (module Results)
+              (fun results ->
+                St.mem_tree store (unwrap key) >|= fun exists ->
+                Results.exists_set results exists;
+                Ok ())
+
           method merge_with_branch_impl params release_param_caps =
             let open Store.MergeWithBranch in
             let branch = Params.branch_get params
@@ -358,7 +424,23 @@ functor
             with_initialised_results
               (module Results)
               (fun results ->
-                Results.sync_set results (Some (Sync.local store));
+                if Option.is_some Remote.v then (
+                  let cap = Sync.local store in
+                  Results.sync_set results (Some cap);
+                  Capability.dec_ref cap );
+                Lwt.return @@ Ok ())
+
+          method pack_impl _params release_param_caps =
+            let open Store.Pack in
+            release_param_caps ();
+            Logs.info (fun f -> f "Store.pack");
+            with_initialised_results
+              (module Results)
+              (fun results ->
+                if Option.is_some P.v then (
+                  let cap = Pack.local (St.repo store) in
+                  Results.pack_set results (Some cap);
+                  Capability.dec_ref cap );
                 Lwt.return @@ Ok ())
 
           method last_modified_impl params release_param_caps =
@@ -372,7 +454,9 @@ functor
                 St.last_modified ~n:1 store (unwrap key) >|= function
                 | [] -> Ok ()
                 | x :: _ ->
-                    Results.commit_set results (Some (Commit.local x));
+                    let commit = Commit.local x in
+                    Results.commit_set results (Some commit);
+                    Capability.dec_ref commit;
                     Ok ())
         end
         |> Store.local
@@ -403,6 +487,7 @@ functor
                 let+ store = St.master repo in
                 let store_service = Store.local store in
                 Results.store_set results (Some store_service);
+                Capability.dec_ref store_service;
                 Ok ())
 
           method of_branch_impl params release_param_caps =
@@ -417,6 +502,7 @@ functor
                 let+ store = St.of_branch repo branch in
                 let store_service = Store.local store in
                 Results.store_set results (Some store_service);
+                Capability.dec_ref store_service;
                 Ok ())
 
           method branch_list_impl _params release_param_caps =
@@ -462,7 +548,9 @@ functor
               (fun results ->
                 let hash = hash |> Codec.Hash.decode |> unwrap in
                 let+ commit = St.Commit.of_hash repo hash in
-                commit |> Option.map Commit.local |> Results.commit_set results;
+                let commit = Option.map Commit.local commit in
+                Results.commit_set results commit;
+                Option.iter Capability.dec_ref commit;
                 Ok ())
         end
         |> Repo.local

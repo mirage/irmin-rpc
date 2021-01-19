@@ -37,7 +37,8 @@ end
 
 module type MAKER = functor
   (Store : Irmin.S)
-  (Endpoint_codec : Codec.SERIALISABLE with type t = Store.Private.Sync.endpoint)
+  (Remote : Config_intf.REMOTE with type t = Store.Private.Sync.endpoint)
+  (Pack : Config_intf.PACK with type repo = Store.repo)
   ->
   S
     with type repo = Store.repo

@@ -2,7 +2,11 @@ open Lwt.Infix
 open Common
 open Irmin_rpc.Private.Utils
 module Server = Irmin_mem.KV (Irmin.Contents.String)
-module RPC = Irmin_rpc.Make (Server) (Irmin_rpc.Codec.Unit)
+module RPC =
+  Irmin_rpc.Make
+    (Server)
+    (Irmin_rpc.Config.Remote.None (Server))
+    (Irmin_rpc.Config.Pack.None (Server))
 
 (** API changes to ease test-writing. Might want to upstream these at some
     point. *)

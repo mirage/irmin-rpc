@@ -1,5 +1,5 @@
 include Codec_intf
-open Lwt.Infix
+open Lwt.Syntax
 
 exception Error_message of string
 
@@ -15,14 +15,6 @@ let codec_of_type (type a) (t : a Irmin.Type.t) =
       :> (a, [> `Msg of _ ]) result )
   in
   (encode, decode)
-
-let ( let+ ) x f = Lwt.map f x
-
-module Unit = struct
-  type t = unit
-
-  let encode, decode = codec_of_type Irmin.Type.unit
-end
 
 module Make (Store : Irmin.S) = struct
   module Branch = struct
@@ -80,21 +72,24 @@ module Make (Store : Irmin.S) = struct
         let module B = Raw.Builder in
         let module R = Raw.Reader in
         Irmin.Type.to_string Store.key_t key |> B.Tree.key_set tr;
-        Store.Tree.to_concrete tree >>= function
+        let* x = Store.Tree.to_concrete tree in
+        match x with
         | `Contents (contents, _) ->
-            B.Tree.contents_set tr
-              (Irmin.Type.to_string Store.contents_t contents);
+            let s = Irmin.Type.to_string Store.contents_t contents in
+            ignore (B.Tree.contents_set tr s);
             Lwt.return_unit
         | `Tree l ->
-            Lwt_list.map_p
-              (fun (step, tree) ->
-                let node = B.Node.init_root () in
-                Irmin.Type.to_string Store.step_t step |> B.Node.step_set node;
-                let tt = B.Node.tree_init node in
-                let tree = Store.Tree.of_concrete tree in
-                inner tt (Store.Key.rcons key step) tree >|= fun () -> node)
-              l
-            >>= fun l ->
+            let* l =
+              Lwt_list.map_p
+                (fun (step, tree) ->
+                  let node = B.Node.init_root () in
+                  Irmin.Type.to_string Store.step_t step |> B.Node.step_set node;
+                  let tt = B.Node.tree_init node in
+                  let tree = Store.Tree.of_concrete tree in
+                  let+ () = inner tt (Store.Key.rcons key step) tree in
+                  node)
+                l
+            in
             let (_ : (Irmin_api.rw, B.Node.t, R.builder_array_t) Capnp.Array.t)
                 =
               B.Tree.node_set_list tr l
@@ -142,9 +137,8 @@ module Make (Store : Irmin.S) = struct
       in
       ignore
         (parents_set_list b (Store.Commit.parents t |> List.map Hash.encode));
-      let+ (_ : Raw.Builder.Tree.t) =
-        Store.Commit.tree t |> Tree.encode >|= tree_set_builder b
-      in
+      let+ x = Store.Commit.tree t |> Tree.encode in
+      let (_ : Raw.Builder.Tree.t) = tree_set_builder b x in
       b
 
     let decode :
@@ -156,7 +150,8 @@ module Make (Store : Irmin.S) = struct
       let open Raw.Reader.Commit.Value in
       match hash_get str |> Hash.decode with
       | Ok hash -> (
-          Store.Commit.of_hash repo hash >|= function
+          let+ commit = Store.Commit.of_hash repo hash in
+          match commit with
           | Some c -> Ok c
           | None -> Error (`Commit_not_found hash) )
       | Error _ as e -> Lwt.return e
@@ -213,4 +208,10 @@ module Make (Store : Irmin.S) = struct
     Info.author_set info (Irmin.Info.author i);
     Info.message_set info (Irmin.Info.message i);
     Info.date_set info (Irmin.Info.date i)
+end
+
+module Unit = struct
+  type t = unit
+
+  let encode, decode = codec_of_type Irmin.Type.unit
 end

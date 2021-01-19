@@ -55,12 +55,27 @@ interface Sync {
   clone  @2  (endpoint :Endpoint) -> (result :Commit);
 }
 
+interface Pack {
+  struct IntegrityCheckResult {
+    union {
+      noError        @0 :Void;
+      fixed          @1 :Int64;
+      cannotFix      @2 :Text;
+      corrupted      @3 :Int64;
+    }
+  }
+
+  integrityCheck @0 (pack :Pack, autoRepair :Bool) -> (result :IntegrityCheckResult);
+}
+
 interface Store {
   find      @0  (key :Key) -> (contents :Contents);
   findTree  @1  (key :Key) -> (tree :Tree);
   set       @2  (key :Key, info :Info, contents :Contents) -> ();
   setTree   @3  (key :Key, info :Info, tree :Tree) -> ();
   remove    @4  (key :Key, info :Info) -> ();
+  mem       @5  (key :Key) -> (exists :Bool);
+  memTree   @6  (key :Key) -> (exists :Bool);
 
   # Merge API on stores
   struct MergeResult {
@@ -70,10 +85,11 @@ interface Store {
     }
   }
 
-  mergeWithBranch  @5  (branch :Text, info :Info) -> (result :MergeResult);
+  mergeWithBranch  @7  (branch :Text, info :Info) -> (result :MergeResult);
 
-  sync  @6  () -> (sync :Sync);
-  lastModified  @7 (key :Key) -> (commit :Commit);
+  sync  @8  () -> (sync :Sync);
+  pack @9 () -> (pack :Pack);
+  lastModified  @10 (key :Key) -> (commit :Commit);
 }
 
 interface Repo {

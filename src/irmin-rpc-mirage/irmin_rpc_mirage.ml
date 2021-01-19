@@ -2,8 +2,8 @@ open Lwt.Infix
 
 module Make
     (Store : Irmin.S)
-    (Endpoint_codec : Irmin_rpc.Codec.SERIALISABLE
-                        with type t = Store.Private.Sync.endpoint)
+    (Remote : Irmin_rpc.Config.REMOTE with type t = Store.Private.Sync.endpoint)
+    (Pack : Irmin_rpc.Config.PACK with type repo = Store.repo)
     (Random : Mirage_random.S)
     (Mclock : Mirage_clock.MCLOCK)
     (Pclock : Mirage_clock.PCLOCK)
@@ -15,7 +15,7 @@ struct
   module Dns = Capnp_rpc_mirage.Network.Dns
 
   module Server = struct
-    module Rpc = Irmin_rpc.Make (Store) (Endpoint_codec)
+    module Rpc = Irmin_rpc.Make (Store) (Remote) (Pack)
 
     let serve ~secret_key ?switch ?serve_tls ?(port = 1111) stack ~addr repo =
       let dns = Dns.create stack in
@@ -36,7 +36,7 @@ struct
   end
 
   module Client = struct
-    include Irmin_rpc.Client.Make (Store) (Endpoint_codec)
+    include Irmin_rpc.Client.Make (Store) (Remote) (Pack)
 
     let connect stack uri =
       let dns = Dns.create stack in

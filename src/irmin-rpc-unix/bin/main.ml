@@ -15,16 +15,8 @@ let run (Irmin_unix.Resolver.S ((module Store), store, _)) host port secret_key
   let module Rpc =
     Irmin_rpc_unix.Make
       (Store)
-      (struct
-        type t = Store.Private.Sync.endpoint
-        (** TODO. [Irmin_unix.Resolver.S] is insufficient context for
-            serialising endpoints of the corresponding store, so we can't use
-            the SYNC API with stores constructed in this manner. *)
-
-        let fail _ = failwith "SYNC API unimplemented for CLI RPC"
-
-        let encode, decode = (fail, fail)
-      end)
+      (Irmin_rpc.Config.Remote.None (Store))
+      (Irmin_rpc.Config.Pack.None (Store))
   in
   let secret_key =
     match secret_key with Some key -> `File key | None -> `Ephemeral

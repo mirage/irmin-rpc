@@ -1,10 +1,6 @@
 open Lwt.Infix
-module Underlying_store = Irmin_unix.Git.Mem.KV (Irmin.Contents.String)
-module Rpc =
-  Irmin_rpc_unix.Make
-    (Underlying_store)
-    (Irmin_rpc_unix.Git_unix_endpoint_codec)
-module Store = Rpc.Client.Store
+open Common
+module Client = Rpc.Client
 
 let () =
   Logs.set_level (Some Logs.Info);
@@ -20,18 +16,21 @@ let info () =
 let ( let* ) = Lwt.bind
 
 let main =
-  let* client = Uri.of_string uri |> Rpc.Client.connect in
-  let* repo = Rpc.Client.repo client in
-  let* master = Store.master repo in
-  Rpc.Client.ping client >>= fun x ->
+  let* client = Uri.of_string uri |> Client.connect in
+  let* repo = Client.repo client in
+  let* master = Client.Store.master repo in
+  Client.ping client >>= fun x ->
   let () = Result.get_ok x in
-  let* () = Store.set ~info master [ "abc" ] "123" in
-  let* res = Store.get master [ "abc" ] in
+  let* () = Client.Store.set ~info master [ "abc" ] "123" in
+  let* res = Client.Store.get master [ "abc" ] in
   assert (res = "123");
   print_endline res;
-  let* tree = Store.find_tree master [] in
-  let* l = Underlying_store.Tree.list (Option.get tree) [] in
+  let* tree = Client.Store.find_tree master [] in
+  let* l = Store.Tree.list (Option.get tree) [] in
   assert (List.length l = 1);
+  let* pack = Client.Store.pack master in
+  let* check = Client.Store.Pack.integrity_check (Option.get pack) in
+  assert (Result.is_ok check);
   Lwt.return ()
 
 let () = Lwt_main.run main

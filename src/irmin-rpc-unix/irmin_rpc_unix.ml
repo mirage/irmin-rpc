@@ -1,21 +1,23 @@
 open Lwt.Infix
 
-module Git_unix_endpoint_codec = struct
-  type t = Mimic.ctx * Smart_git.Endpoint.t
+module Remote = struct
+  module Git = struct
+    type t = Mimic.ctx * Smart_git.Endpoint.t
 
-  let encode (_, endpoint) = Fmt.to_to_string Smart_git.Endpoint.pp endpoint
+    let encode (_, endpoint) = Fmt.to_to_string Smart_git.Endpoint.pp endpoint
 
-  let decode str =
-    Result.map (fun x -> (Mimic.empty, x)) @@ Smart_git.Endpoint.of_string str
+    let decode str =
+      Result.map (fun x -> (Mimic.empty, x)) @@ Smart_git.Endpoint.of_string str
+  end
 end
 
 module Make
     (Store : Irmin.S)
-    (Endpoint_codec : Irmin_rpc.Codec.SERIALISABLE
-                        with type t = Store.Private.Sync.endpoint) =
+    (Remote : Irmin_rpc.Config.REMOTE with type t = Store.Private.Sync.endpoint)
+    (Pack : Irmin_rpc.Config.PACK with type repo = Store.repo) =
 struct
   module Server = struct
-    module Api = Irmin_rpc.Server.Make (Store) (Endpoint_codec)
+    module Api = Irmin_rpc.Server.Make (Store) (Remote) (Pack)
 
     type t = { uri : Uri.t }
 
@@ -32,7 +34,7 @@ struct
   end
 
   module Client = struct
-    include Irmin_rpc.Client.Make (Store) (Endpoint_codec)
+    include Irmin_rpc.Client.Make (Store) (Remote) (Pack)
 
     let connect uri =
       let client_vat = Capnp_rpc_unix.client_only_vat () in

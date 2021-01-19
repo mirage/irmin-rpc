@@ -10,6 +10,8 @@ module Types = struct
   type commit = Raw.Client.Commit.t Capability.t
 
   type sync = Raw.Client.Sync.t Capability.t
+
+  type pack = Raw.Client.Pack.t Capability.t
 end
 
 module type S = sig
@@ -35,6 +37,8 @@ module type S = sig
 
     type sync
 
+    type pack
+
     val master : repo -> t Lwt.t
 
     val of_branch : repo -> branch -> t Lwt.t
@@ -54,9 +58,11 @@ module type S = sig
     val merge_with_branch :
       t -> info:Info.f -> branch -> (unit, Merge.conflict) result Lwt.t
 
-    val sync : t -> sync Lwt.t
+    val sync : t -> sync option Lwt.t
 
-    val last_modified : t -> key -> commit option Lwt.t
+    val pack : t -> pack option Lwt.t
+
+    val last_modified : t -> key -> commit Lwt.t
 
     module Branch : sig
       val list : repo -> branch list Lwt.t
@@ -67,7 +73,7 @@ module type S = sig
     end
 
     module Commit : sig
-      val of_hash : repo -> hash -> commit option Lwt.t
+      val of_hash : repo -> hash -> commit Lwt.t
 
       val hash : commit -> hash Lwt.t
 
@@ -91,6 +97,16 @@ module type S = sig
         ([ `Empty | `Head of hash ], [ `Detached_head | `Msg of string ]) result
         Lwt.t
     end
+
+    module Pack : sig
+      val integrity_check :
+        ?auto_repair:bool ->
+        pack ->
+        ( [ `No_error | `Fixed of int ],
+          [ `Corrupted of int | `Cannot_fix of string ] )
+        result
+        Lwt.t
+    end
   end
 
   val repo : t -> Store.repo Lwt.t
@@ -100,7 +116,8 @@ end
 
 module type MAKER = functor
   (Store : Irmin.S)
-  (Endpoint_codec : Codec.SERIALISABLE with type t = Store.Private.Sync.endpoint)
+  (Remote : Config.REMOTE with type t = Store.Private.Sync.endpoint)
+  (Pack : Config.PACK with type repo = Store.repo)
   ->
   S
     with type Store.tree = Store.tree
@@ -108,7 +125,7 @@ module type MAKER = functor
      and type Store.key = Store.key
      and type Store.contents = Store.contents
      and type Store.hash = Store.hash
-     and type Store.Sync.endpoint = Endpoint_codec.t
+     and type Store.Sync.endpoint = Remote.t
 
 module type Client = sig
   module type S = S

@@ -1,8 +1,8 @@
 # capnp
-FROM alpine as capnp
+FROM debian as capnp
 
 RUN mkdir -p /src
-RUN apk update && apk add autoconf automake libtool linux-headers git g++ make
+RUN apt-get update && apt-get install -y autoconf automake libtool git g++ make
 RUN cd /src && git clone https://github.com/capnproto/capnproto.git
 WORKDIR /src/capnproto/c++
 RUN ./setup-autotools.sh
@@ -13,8 +13,9 @@ RUN make install
 RUN which capnp
 
 # base
-FROM ocaml/opam2:alpine as base
-RUN sudo apk add --update m4 gmp gmp-dev perl
+FROM ocaml/opam2:debian as base
+RUN sudo apt-get update
+RUN sudo apt-get install -y m4 libgmp-dev perl libev-dev libcapnproto-dev capnproto
 RUN git -C /home/opam/opam-repository pull
 RUN opam update
 
@@ -39,7 +40,7 @@ RUN opam config exec -- opam pin add irmin-rpc . --locked
 RUN opam config exec -- opam pin add irmin-rpc-unix . --locked
 
 # irmin-rpc
-FROM alpine
+FROM debian
 EXPOSE 9090
 COPY --from=base /home/opam/.opam/4.07/bin/irmin-rpc .
 COPY --from=base /usr/lib/libgmp* /usr/lib/

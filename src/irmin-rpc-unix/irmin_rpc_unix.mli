@@ -1,10 +1,12 @@
-module Git_unix_endpoint_codec :
-  Irmin_rpc.Codec.SERIALISABLE with type t = Mimic.ctx * Smart_git.Endpoint.t
+module Remote : sig
+  module Git :
+    Irmin_rpc.Codec.SERIALISABLE with type t = Mimic.ctx * Smart_git.Endpoint.t
+end
 
 module Make
     (Store : Irmin.S)
-    (Endpoint_codec : Irmin_rpc.Codec.SERIALISABLE
-                        with type t = Store.Private.Sync.endpoint) : sig
+    (Remote : Irmin_rpc.Config.REMOTE with type t = Store.Private.Sync.endpoint)
+    (Pack : Irmin_rpc.Config.PACK with type repo = Store.repo) : sig
   module Server : sig
     type t
 
@@ -33,7 +35,7 @@ module Make
   end
 
   module Client : sig
-    include module type of Irmin_rpc.Client.Make (Store) (Endpoint_codec)
+    include module type of Irmin_rpc.Client.Make (Store) (Remote) (Pack)
 
     val connect : Uri.t -> t Lwt.t
   end

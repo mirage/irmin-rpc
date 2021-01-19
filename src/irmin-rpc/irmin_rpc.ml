@@ -1,5 +1,6 @@
-module Client = Client
 module Codec = Codec
+module Config = Config
+module Client = Client
 module Server = Server
 
 module Private = struct
@@ -8,9 +9,9 @@ end
 
 module Make
     (Store : Irmin.S)
-    (Endpoint_codec : Codec.SERIALISABLE
-                        with type t = Store.Private.Sync.endpoint) =
+    (Remote : Config.REMOTE with type t = Store.Private.Sync.endpoint)
+    (Pack : Config.PACK with type repo = Store.repo) =
 struct
-  module Client = Client.Make (Store) (Endpoint_codec)
-  module Server = Server.Make (Store) (Endpoint_codec)
+  module Client = Client.Make (Store) (Remote) (Pack)
+  module Server = Server.Make (Store) (Remote) (Pack)
 end

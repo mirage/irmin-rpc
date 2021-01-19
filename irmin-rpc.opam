@@ -16,6 +16,7 @@ depends: [
   "cohttp"
   "fmt"
   "irmin" {>= "2.3.0"}
+  "irmin-pack" {>= "2.3.0"}
   "lwt"
   "result" {>= "1.5"}
   "stdint"

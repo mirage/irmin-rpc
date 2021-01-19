@@ -3,13 +3,18 @@ module Store = Irmin_mem.KV (Irmin.Contents.String)
 
 module Main
     (Random : Mirage_random.S)
-    (Mclock : Mirage_clock_lwt.MCLOCK)
-    (Pclock : Mirage_clock_lwt.PCLOCK)
-    (Time : Mirage_time_lwt.S)
-    (Stack : Mirage_stack_lwt.V4) =
+    (Mclock : Mirage_clock.MCLOCK)
+    (Pclock : Mirage_clock.PCLOCK)
+    (Time : Mirage_time.S)
+    (Stack : Mirage_stack.V4) =
 struct
   module Rpc =
-    Irmin_rpc_mirage.Make (Store) (Irmin_rpc.Codec.Unit) (Random) (Mclock)
+    Irmin_rpc_mirage.Make
+      (Store)
+      (Irmin_rpc.Config.Remote.None(Store))
+      (Irmin_rpc.Config.Pack.None(Store))
+      (Random)
+      (Mclock)
       (Pclock)
       (Time)
       (Stack)

@@ -2,7 +2,11 @@ open Irmin_rpc.Private.Utils
 open Lwt.Infix
 open Common
 module S_server = Irmin_mem.KV (Irmin.Contents.String)
-module RPC = Irmin_rpc.Make (S_server) (Irmin_rpc.Codec.Unit)
+module RPC =
+  Irmin_rpc.Make
+    (Server)
+    (Irmin_rpc.Config.Remote.None (S_server))
+    (Irmin_rpc.Config.Pack.None (Server))
 module Client = RPC.Client
 module S_client = RPC.Client.Store
 
