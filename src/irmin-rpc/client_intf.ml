@@ -12,6 +12,8 @@ module Types = struct
   type sync = Raw.Client.Sync.t Capability.t
 
   type pack = Raw.Client.Pack.t Capability.t
+
+  type tree = Raw.Client.Tree.t Capability.t
 end
 
 module type S = sig
@@ -25,8 +27,6 @@ module type S = sig
     include module type of Types
     (** @inline *)
 
-    type tree
-
     type branch
 
     type key
@@ -39,6 +39,8 @@ module type S = sig
 
     type pack
 
+    type step
+
     val master : repo -> t Lwt.t
 
     val of_branch : repo -> branch -> t Lwt.t
@@ -47,7 +49,7 @@ module type S = sig
 
     val find : t -> key -> (contents option, [> `Msg of string ]) result Lwt.t
 
-    val find_tree : t -> key -> tree option Lwt.t
+    val find_tree : t -> key -> tree Lwt.t
 
     val set : info:Irmin.Info.f -> t -> key -> contents -> unit Lwt.t
 
@@ -70,6 +72,17 @@ module type S = sig
       val remove : repo -> branch -> unit Lwt.t
 
       val set : repo -> branch -> commit -> unit Lwt.t
+    end
+
+    module Tree : sig
+      (*val find : tree -> key -> contents option Lwt.t
+
+        val find_tree : tree -> key -> tree option Lwt.t
+
+        val set : tree -> key -> contents -> unit Lwt.t
+
+        val set_tree : tree -> key -> tree -> unit Lwt.t*)
+      val exists : tree -> bool Lwt.t
     end
 
     module Commit : sig
@@ -120,8 +133,7 @@ module type MAKER = functor
   (Pack : Config.PACK with type repo = Store.repo)
   ->
   S
-    with type Store.tree = Store.tree
-     and type Store.branch = Store.branch
+    with type Store.branch = Store.branch
      and type Store.key = Store.key
      and type Store.contents = Store.contents
      and type Store.hash = Store.hash

@@ -15,10 +15,12 @@ module Remote = struct
 end
 
 module Pack = struct
-  module Make (P : Irmin_pack.Store.S) = struct
+  module type STORE = STORE
+
+  module Make (P : STORE) = struct
     type repo = P.repo
 
-    let v = Some (module P : Irmin_pack.Store.S with type repo = P.repo)
+    let v = Some (module P : STORE with type repo = P.repo)
   end
 
   module None (Store : Irmin.S) = struct

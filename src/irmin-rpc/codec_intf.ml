@@ -30,11 +30,15 @@ module type MAKER = functor (Store : Irmin.S) -> sig
   end
 
   module Tree : sig
-    type t = Store.tree
+    type t = [ `Contents of Store.hash | `Tree of (Store.step * t) list ]
 
-    val encode : t -> Raw.Builder.Tree.t Lwt.t
+    val of_irmin_tree : Store.tree -> t Lwt.t
 
-    val decode : Raw.Reader.Tree.t -> t
+    val to_irmin_tree : Store.repo -> t -> Store.tree Lwt.t
+
+    val encode : t -> Raw.Builder.Tree.Concrete.t Lwt.t
+
+    val decode : Raw.Reader.Tree.Concrete.t -> t
   end
 
   module Commit : sig

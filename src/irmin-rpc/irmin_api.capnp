@@ -5,17 +5,31 @@ using Contents = Data;
 using Endpoint = Data;
 using Key = Text;
 
-struct Node {
-  step  @0  :Text;
-  tree  @1  :Tree;
-}
 
-struct Tree {
-  key @0 :Key;
-  union {
-    contents @1 :Contents;
-    node @2 :List(Node);
+
+interface Tree {
+  struct Node {
+    step  @0  :Text;
+    tree  @1  :Concrete;
   }
+
+  struct Concrete {
+    key @0 :Key;
+    union {
+      contents @1 :Hash;
+      node @2 :List(Node);
+    }
+  }
+
+  find @0 (key :Key) -> (contents :Contents);
+  findTree @1 (key :Key) -> (tree :Tree);
+  set @2 (key :Key, contents :Contents) -> ();
+  setTree @3 (key :Key, tree :Tree) -> ();
+  mem @4 (key :Key) -> (exists :Bool);
+  memTree @5 (key :Key) -> (exists :Bool);
+  getConcrete @6 () -> (concrete :Concrete);
+  hash @7 () -> (hash :Hash);
+  exists @8 () -> (ok :Bool);
 }
 
 struct Info {
@@ -29,7 +43,7 @@ interface Commit {
     hash     @0  :Hash;
     info     @1  :Info;
     parents  @2  :List(Hash);
-    tree     @3  :Tree;
+    tree     @3  :Tree.Concrete;
   }
 
   read     @0  () -> (value :Value);
@@ -100,7 +114,8 @@ interface Repo {
   branchRemove  @3  (branch :Text) -> ();
   branchSet     @4  (branch :Text, commit :Commit) -> ();
 
-  commitOfHash  @5  (hash :Hash) -> (commit :Commit);
+  commitOfHash   @5  (hash :Hash) -> (commit :Commit);
+  contentsOfHash @6  (hash :Hash) -> (contents :Contents);
 }
 
 # The top-level interface of an RPC server

@@ -4,10 +4,22 @@ module type REMOTE = sig
   val v : (module Codec.SERIALISABLE with type t = t) option
 end
 
+module type STORE = sig
+  type repo
+
+  val integrity_check :
+    ?ppf:Format.formatter ->
+    auto_repair:bool ->
+    repo ->
+    ( [> `Fixed of int | `No_error ],
+      [> `Cannot_fix of string | `Corrupted of int ] )
+    result
+end
+
 module type PACK = sig
   type repo
 
-  val v : (module Irmin_pack.Store.S with type repo = repo) option
+  val v : (module STORE with type repo = repo) option
 end
 
 module type Config = sig
@@ -23,8 +35,9 @@ module type Config = sig
   end
 
   module Pack : sig
-    module Make : functor (P : Irmin_pack.Store.S) ->
-      PACK with type repo = P.repo
+    module type STORE = STORE
+
+    module Make : functor (S : STORE) -> PACK with type repo = S.repo
 
     module None (Store : Irmin.S) : PACK with type repo = Store.repo
   end

@@ -11,8 +11,7 @@ struct
   module Rpc =
     Irmin_rpc_mirage.Make
       (Store)
-      (Irmin_rpc.Config.Remote.None(Store))
-      (Irmin_rpc.Config.Pack.None(Store))
+      (Irmin_rpc.Config.Remote.None (Store))
       (Random)
       (Mclock)
       (Pclock)

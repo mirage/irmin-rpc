@@ -25,12 +25,12 @@ let main =
   let* res = Client.Store.get master [ "abc" ] in
   assert (res = "123");
   print_endline res;
-  let* tree = Client.Store.find_tree master [] in
-  let* l = Store.Tree.list (Option.get tree) [] in
-  assert (List.length l = 1);
-  let* pack = Client.Store.pack master in
-  let* check = Client.Store.Pack.integrity_check (Option.get pack) in
-  assert (Result.is_ok check);
+  let () = Lwt.ignore_result @@ Client.Store.find_tree master [] in
+  (*let* l = Store.Tree.list tree [] in
+    assert (List.length l = 1);*)
+  (*let* pack = Client.Store.pack master in
+    let* check = Client.Store.Pack.integrity_check (Option.get pack) in
+    assert (Result.is_ok check);*)
   Lwt.return ()
 
 let () = Lwt_main.run main

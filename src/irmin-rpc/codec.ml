@@ -63,48 +63,113 @@ module Make (Store : Irmin.S) = struct
   end
 
   module Tree = struct
-    type t = Store.tree
+    type t = [ `Contents of Store.hash | `Tree of (Store.step * t) list ]
 
-    (** TODO: avoid coercions to and from concrete trees *)
+    (*let rec encode (tree : Store.tree) : Raw.Builder.Tree.t Lwt.t =
+      let module B = Raw.Builder in
+      let module R = Raw.Reader in
+      let contents key value tr =
+        Irmin.Type.to_string Store.key_t key |> B.Tree.key_set tr;
+        Irmin.Type.to_string Store.Hash.t (Store.Contents.hash value)
+        |> B.Tree.contents_set tr;
+        Lwt.return tr
+      in
+      let node key node tr =
+        Irmin.Type.to_string Store.key_t key |> B.Tree.key_set tr;
+        let* items =
+          Store.Tree.list (Store.Tree.of_node node) Store.Key.empty
+        in
+        let* l =
+          Lwt_list.map_p
+            (fun (step, tree) ->
+              let node = B.Node.init_root () in
+              Irmin.Type.to_string Store.step_t step |> B.Node.step_set node;
+              let+ x = encode tree in
+              ignore (B.Node.tree_set_builder node x);
+              node)
+            items
+        in
+        let (_ : (Irmin_api.rw, B.Node.t, R.builder_array_t) Capnp.Array.t) =
+          B.Tree.node_set_list tr l
+        in
+        Lwt.return tr
+      in
+      let tr = Raw.Builder.Tree.init_root () in
+      Store.Tree.fold tree ~contents ~node tr*)
+    let rec of_irmin_tree (x : Store.tree) : t Lwt.t =
+      let* t = Store.Tree.to_concrete x in
+      match t with
+      | `Contents (c, _) -> Lwt.return @@ `Contents (Store.Contents.hash c)
+      | `Tree l ->
+          let+ x =
+            Lwt_list.map_s
+              (fun (step, tree) ->
+                let tree = Store.Tree.of_concrete tree in
+                let+ x = of_irmin_tree tree in
+                (step, x))
+              l
+          in
+          `Tree x
 
-    let encode (tree : Store.tree) : Raw.Builder.Tree.t Lwt.t =
-      let rec inner tr key tree =
+    let to_irmin_tree repo (t : t) : Store.tree Lwt.t =
+      let rec inner repo t =
+        match t with
+        | `Contents hash ->
+            let+ contents = Store.Contents.of_hash repo hash in
+            `Contents (Option.get contents, Store.Metadata.default)
+        | `Tree l ->
+            let+ l =
+              Lwt_list.map_s
+                (fun (step, t) ->
+                  let+ t = inner repo t in
+                  (step, t))
+                l
+            in
+            `Tree l
+      in
+      let+ x = inner repo t in
+      Store.Tree.of_concrete x
+
+    let encode (tree : t) : Raw.Builder.Tree.Concrete.t Lwt.t =
+      let rec inner tr key (tree : t) =
         let module B = Raw.Builder in
         let module R = Raw.Reader in
-        Irmin.Type.to_string Store.key_t key |> B.Tree.key_set tr;
-        let* x = Store.Tree.to_concrete tree in
-        match x with
-        | `Contents (contents, _) ->
-            let s = Irmin.Type.to_string Store.contents_t contents in
-            ignore (B.Tree.contents_set tr s);
+        Irmin.Type.to_string Store.key_t key |> B.Tree.Concrete.key_set tr;
+        match tree with
+        | `Contents hash ->
+            let s = Irmin.Type.to_string Store.Hash.t hash in
+            ignore (B.Tree.Concrete.contents_set tr s);
             Lwt.return_unit
         | `Tree l ->
             let* l =
               Lwt_list.map_p
                 (fun (step, tree) ->
-                  let node = B.Node.init_root () in
-                  Irmin.Type.to_string Store.step_t step |> B.Node.step_set node;
-                  let tt = B.Node.tree_init node in
-                  let tree = Store.Tree.of_concrete tree in
+                  let node = B.Tree.Node.init_root () in
+                  Irmin.Type.to_string Store.step_t step
+                  |> B.Tree.Node.step_set node;
+                  let tt = B.Tree.Concrete.init_root () in
                   let+ () = inner tt (Store.Key.rcons key step) tree in
                   node)
                 l
             in
-            let (_ : (Irmin_api.rw, B.Node.t, R.builder_array_t) Capnp.Array.t)
-                =
-              B.Tree.node_set_list tr l
+            let (_
+                  : ( Irmin_api.rw,
+                      B.Tree.Node.t,
+                      R.builder_array_t )
+                    Capnp.Array.t) =
+              B.Tree.Concrete.node_set_list tr l
             in
             Lwt.return_unit
       in
-      let tr = Raw.Builder.Tree.init_root () in
+      let tr = Raw.Builder.Tree.Concrete.init_root () in
       let+ () = inner tr Store.Key.empty tree in
       tr
 
-    let decode tree =
+    let decode (tree : Raw.Reader.Tree.Concrete.t) : t =
       let rec inner tree =
         let module Tree = Raw.Reader.Tree in
-        let module Node = Raw.Reader.Node in
-        match Tree.get tree with
+        let module Node = Raw.Reader.Tree.Node in
+        match Tree.Concrete.get tree with
         | Node l ->
             Capnp.Array.to_list l
             |> List.map (fun node ->
@@ -117,11 +182,11 @@ module Make (Store : Irmin.S) = struct
                    (step, tree))
             |> fun t -> `Tree t
         | Contents c ->
-            let c = Irmin.Type.of_string Store.contents_t c |> unwrap in
-            `Contents (c, Store.Metadata.default)
+            let hash = Irmin.Type.of_string Store.Hash.t c |> unwrap in
+            `Contents hash
         | Undefined _ -> `Tree []
       in
-      inner tree |> Store.Tree.of_concrete
+      inner tree
   end
 
   module Commit = struct
@@ -137,9 +202,10 @@ module Make (Store : Irmin.S) = struct
       in
       ignore
         (parents_set_list b (Store.Commit.parents t |> List.map Hash.encode));
-      let+ x = Store.Commit.tree t |> Tree.encode in
-      let (_ : Raw.Builder.Tree.t) = tree_set_builder b x in
-      b
+      let* x = Store.Commit.tree t |> Tree.of_irmin_tree in
+      let* t = Tree.encode x in
+      ignore (tree_set_builder b t);
+      Lwt.return b
 
     let decode :
         Store.repo ->

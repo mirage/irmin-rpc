@@ -43,8 +43,6 @@ functor
     module Store = struct
       include Types
 
-      type tree = Store.tree
-
       type branch = Store.branch
 
       type key = Store.key
@@ -52,6 +50,8 @@ functor
       type contents = Store.contents
 
       type hash = Store.hash
+
+      type step = Store.Key.step
 
       let master t =
         let open Raw.Client.Repo.Master in
@@ -93,10 +93,8 @@ functor
         log_key (module Store) "Store.find_tree" key;
         let req, p = Capability.Request.create Params.init_pointer in
         Codec.Key.encode key |> Params.key_set p;
-        let+ res = Capability.call_for_value_exn t method_id req in
-        match Results.has_tree res with
-        | true -> Results.tree_get res |> Codec.Tree.decode |> Option.some
-        | false -> None
+        Capability.call_for_caps t method_id req Results.tree_get_pipelined
+        |> Lwt.return
 
       let set ~info t key contents =
         let open Raw.Client.Store.Set in
@@ -115,11 +113,10 @@ functor
         log_key (module Store) "Store.set_tree" key;
         let req, p = Capability.Request.create Params.init_pointer in
         Codec.Key.encode key |> Params.key_set p;
+        Params.tree_set p (Some tree);
         let (_ : Raw.Builder.Info.t) =
           info () |> Codec.Info.encode |> Params.info_set_builder p
         in
-        let* e = Codec.Tree.encode tree in
-        let (_ : Raw.Builder.Tree.t) = Params.tree_set_builder p e in
         let+ _ = Capability.call_for_value_exn t method_id req in
         ()
 
@@ -236,8 +233,9 @@ functor
           let open Raw.Client.Commit.Tree in
           Logs.info (fun l -> l "Commit.tree");
           let req = Capability.Request.create_no_args () in
-          let+ res = Capability.call_for_value_exn commit method_id req in
-          Results.tree_get res |> Codec.Tree.decode
+          Capability.call_for_caps commit method_id req
+            Results.tree_get_pipelined
+          |> Lwt.return
 
         let parents commit =
           let open Raw.Client.Commit.Parents in
@@ -312,6 +310,15 @@ functor
           | Corrupted n -> Error (`Corrupted (Int64.to_int n))
           | CannotFix m -> Error (`Cannot_fix m)
           | Undefined x -> failwith ("undefined: " ^ string_of_int x)
+      end
+
+      module Tree = struct
+        let exists tree =
+          let open Raw.Client.Tree.Exists in
+          Logs.info (fun l -> l "Tree.exists");
+          let req = Capability.Request.create_no_args () in
+          let+ res = Capability.call_for_value_exn tree method_id req in
+          Results.ok_get res
       end
     end
 

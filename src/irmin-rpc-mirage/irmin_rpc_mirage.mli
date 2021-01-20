@@ -1,7 +1,6 @@
 module Make
     (Store : Irmin.S)
     (Remote : Irmin_rpc.Config.REMOTE with type t = Store.Private.Sync.endpoint)
-    (Pack : Irmin_rpc.Config.PACK with type repo = Store.repo)
     (Random : Mirage_random.S)
     (Mclock : Mirage_clock.MCLOCK)
     (Pclock : Mirage_clock.PCLOCK)
@@ -32,8 +31,7 @@ module Make
   module Client : sig
     include
       Irmin_rpc.Client.S
-        with type Store.tree = Store.tree
-         and type Store.branch = Store.branch
+        with type Store.branch = Store.branch
          and type Store.key = Store.key
          and type Store.contents = Store.contents
          and type Store.hash = Store.hash
