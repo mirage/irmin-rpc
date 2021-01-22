@@ -5,8 +5,15 @@ using Contents = Data;
 using Endpoint = Data;
 using Key = Text;
 
+# Irmin.Info.t
+struct Info {
+  author   @0  :Text;
+  message  @1  :Text;
+  date     @2  :Int64;
+}
 
 
+# Store.Tree
 interface Tree {
   struct Node {
     step  @0  :Text;
@@ -22,20 +29,15 @@ interface Tree {
   }
 
   find @0 (key :Key) -> (contents :Contents);
-  findTree @1 (key :Key) -> (tree :Tree);
-  set @2 (key :Key, contents :Contents) -> ();
-  setTree @3 (key :Key, tree :Tree) -> ();
+  getTree @1 (key :Key) -> (tree :Tree);
+  add @2 (key :Key, contents :Contents) -> (tree :Tree);
+  addTree @3 (key :Key, tree :Tree) -> (tree :Tree);
   mem @4 (key :Key) -> (exists :Bool);
   memTree @5 (key :Key) -> (exists :Bool);
   getConcrete @6 () -> (concrete :Concrete);
   hash @7 () -> (hash :Hash);
-  exists @8 () -> (ok :Bool);
-}
-
-struct Info {
-  author   @0  :Text;
-  message  @1  :Text;
-  date     @2  :Int64;
+  findHash @8 (key :Key) -> (hash :Hash);
+  remove   @9  (key :Key) -> (tree :Tree);
 }
 
 interface Commit {
@@ -84,7 +86,7 @@ interface Pack {
 
 interface Store {
   find      @0  (key :Key) -> (contents :Contents);
-  findTree  @1  (key :Key) -> (tree :Tree);
+  getTree  @1  (key :Key) -> (tree :Tree);
   set       @2  (key :Key, info :Info, contents :Contents) -> ();
   setTree   @3  (key :Key, info :Info, tree :Tree) -> ();
   remove    @4  (key :Key, info :Info) -> ();
@@ -104,6 +106,8 @@ interface Store {
   sync  @8  () -> (sync :Sync);
   pack @9 () -> (pack :Pack);
   lastModified  @10 (key :Key) -> (commit :Commit);
+  findHash @11 (key :Key) -> (hash :Hash);
+  contentsOfHash @12  (hash :Hash) -> (contents :Contents);
 }
 
 interface Repo {
@@ -116,6 +120,7 @@ interface Repo {
 
   commitOfHash   @5  (hash :Hash) -> (commit :Commit);
   contentsOfHash @6  (hash :Hash) -> (contents :Contents);
+  emptyTree @7 () -> (tree :Tree);
 }
 
 # The top-level interface of an RPC server

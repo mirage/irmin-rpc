@@ -18,8 +18,8 @@ let ( let* ) = Lwt.bind
 type ctx = {
   irmin : RPC.Client.t;
   store : S_client.t;
-  repo : S_client.repo;
-  commit : S_client.commit;
+  repo : Client.repo;
+  commit : Client.commit;
 }
 (** Each test consumes a broken capability of each type. *)
 

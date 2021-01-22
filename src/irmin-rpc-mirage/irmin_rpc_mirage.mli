@@ -31,10 +31,13 @@ module Make
   module Client : sig
     include
       Irmin_rpc.Client.S
-        with type Store.branch = Store.branch
-         and type Store.key = Store.key
-         and type Store.contents = Store.contents
-         and type Store.hash = Store.hash
+        with type branch = Store.branch
+         and type key = Store.key
+         and type step = Store.Key.step
+         and type contents = Store.contents
+         and type hash = Store.hash
+         and module Key = Store.Key
+         and module Hash = Store.Hash
 
     val connect : Stack.t -> Uri.t -> t Lwt.t
   end

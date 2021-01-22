@@ -4,6 +4,9 @@ type info_struct = Builder.Info.struct_t
 
 type commit_struct = Builder.Commit.Value.struct_t
 
+type ('hash, 'step) concrete_tree =
+  [ `Contents of 'hash | `Tree of ('step * ('hash, 'step) concrete_tree) list ]
+
 module type SERIALISABLE = sig
   type t
 
@@ -30,7 +33,7 @@ module type MAKER = functor (Store : Irmin.S) -> sig
   end
 
   module Tree : sig
-    type t = [ `Contents of Store.hash | `Tree of (Store.step * t) list ]
+    type t = (Store.hash, Store.step) concrete_tree
 
     val of_irmin_tree : Store.tree -> t Lwt.t
 

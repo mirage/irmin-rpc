@@ -23,8 +23,22 @@ functor
   ->
   struct
     module Codec = Codec.Make (Store)
+    include Types
 
     type t = Raw.Client.Irmin.t Capability.t
+
+    type branch = Store.branch
+
+    type key = Store.key
+
+    type contents = Store.contents
+
+    type hash = Store.hash
+
+    type step = Store.Key.step
+
+    module Key = Store.Key
+    module Hash = Store.Hash
 
     let remote =
       match Remote.v with
@@ -40,18 +54,188 @@ functor
             let encode _ = fail ()
           end )
 
+    module Commit = struct
+      type t = commit
+
+      let of_hash repo hash : commit Lwt.t =
+        let open Raw.Client.Repo.CommitOfHash in
+        Logs.info (fun l ->
+            l "Commit.of_hash: %a" (Irmin.Type.pp Store.Hash.t) hash);
+        let req, p = Capability.Request.create Params.init_pointer in
+        Params.hash_set p (Codec.Hash.encode hash);
+        Lwt.return
+        @@ Capability.call_for_caps repo method_id req
+             Results.commit_get_pipelined
+
+      let hash commit =
+        let open Raw.Client.Commit.Hash in
+        Logs.info (fun l -> l "Commit.hash");
+        let req = Capability.Request.create_no_args () in
+        let+ res = Capability.call_for_value_exn commit method_id req in
+        Results.hash_get res |> Codec.Hash.decode |> Result.get_ok
+
+      let info commit =
+        let open Raw.Client.Commit.Info in
+        Logs.info (fun l -> l "Commit.info");
+        let req = Capability.Request.create_no_args () in
+        let+ res = Capability.call_for_value_exn commit method_id req in
+        Results.info_get res |> Codec.Info.decode
+
+      let tree commit =
+        let open Raw.Client.Commit.Tree in
+        Logs.info (fun l -> l "Commit.tree");
+        let req = Capability.Request.create_no_args () in
+        Capability.call_for_caps commit method_id req Results.tree_get_pipelined
+        |> Lwt.return
+
+      let parents commit =
+        let open Raw.Client.Commit.Parents in
+        Logs.info (fun l -> l "Commit.parents");
+        let req = Capability.Request.create_no_args () in
+        let+ res = Capability.call_for_value_exn commit method_id req in
+        Results.hashes_get_list res
+        |> List.map (fun x -> Codec.Hash.decode x |> Result.get_ok)
+    end
+
+    module Sync = struct
+      type t = sync
+
+      type endpoint = Remote.t
+
+      let clone t endpoint =
+        let open Raw.Client.Sync.Clone in
+        let (module Remote) = remote in
+        Logs.info (fun l -> l "Sync.clone");
+        let req, p = Capability.Request.create Params.init_pointer in
+        Params.endpoint_set p (Remote.encode endpoint);
+        Capability.call_for_caps t method_id req Results.result_get_pipelined
+        |> Lwt.return
+
+      let pull t ~info endpoint =
+        let open Raw.Client.Sync.Pull in
+        let (module Remote) = remote in
+        Logs.info (fun l -> l "Sync.pull");
+        let req, p = Capability.Request.create Params.init_pointer in
+        Params.endpoint_set p (Remote.encode endpoint);
+        let _ = Params.info_set_builder p (Codec.Info.encode @@ info ()) in
+        Capability.call_for_caps t method_id req Results.result_get_pipelined
+        |> Lwt.return
+
+      let decode_push_result t =
+        let open Raw.Reader.Sync.PushResult in
+        match get t with
+        | OkEmpty -> Lwt.return @@ Ok `Empty
+        | OkHead head ->
+            let hash = Codec.Hash.decode head |> unwrap in
+            Lwt.return @@ Ok (`Head hash)
+        | ErrorDetachedHead -> Lwt.return @@ Error `Detached_head
+        | ErrorMsg msg -> Lwt.return @@ Error (`Msg msg)
+        | Undefined _ -> Lwt.return @@ Error (`Msg "Undefined")
+
+      let push t endpoint =
+        let open Raw.Client.Sync.Push in
+        let (module Remote) = remote in
+        Logs.info (fun l -> l "Sync.push");
+        let req, p = Capability.Request.create Params.init_pointer in
+        Params.endpoint_set p (Remote.encode endpoint);
+        let* (x : Results.t) = Capability.call_for_value_exn t method_id req in
+        let x = Results.result_get x in
+        decode_push_result x
+    end
+
+    module Tree = struct
+      type t = tree
+
+      let empty repo =
+        let open Raw.Client.Repo.EmptyTree in
+        Logs.info (fun l -> l "Tree.empty");
+        let req = Capability.Request.create_no_args () in
+        Capability.call_for_caps repo method_id req Results.tree_get_pipelined
+        |> Lwt.return
+
+      let find tree key =
+        let open Raw.Client.Tree.Find in
+        Logs.info (fun l -> l "Tree.find");
+        let req, p = Capability.Request.create Params.init_pointer in
+        Params.key_set p (Codec.Key.encode key);
+        let+ x = Capability.call_for_value_exn tree method_id req in
+        if Results.has_contents x then
+          Some (Results.contents_get x |> Codec.Contents.decode |> unwrap)
+        else None
+
+      let get_tree tree key =
+        let open Raw.Client.Tree.GetTree in
+        Logs.info (fun l -> l "Tree.get_tree");
+        let req, p = Capability.Request.create Params.init_pointer in
+        Params.key_set p (Codec.Key.encode key);
+        Capability.call_for_caps tree method_id req Results.tree_get_pipelined
+        |> Lwt.return
+
+      let add tree key value =
+        let open Raw.Client.Tree.Add in
+        Logs.info (fun l -> l "Tree.add");
+        let req, p = Capability.Request.create Params.init_pointer in
+        Params.key_set p (Codec.Key.encode key);
+        Params.contents_set p (Codec.Contents.encode value);
+        Capability.call_for_caps tree method_id req Results.tree_get_pipelined
+        |> Lwt.return
+
+      let add_tree tree key value =
+        let open Raw.Client.Tree.AddTree in
+        Logs.info (fun l -> l "Tree.add_tree");
+        let req, p = Capability.Request.create Params.init_pointer in
+        Params.key_set p (Codec.Key.encode key);
+        Params.tree_set p (Some value);
+        Capability.call_for_caps tree method_id req Results.tree_get_pipelined
+        |> Lwt.return
+
+      let mem tree key =
+        let open Raw.Client.Tree.Mem in
+        Logs.info (fun l -> l "Tree.mem");
+        let req, p = Capability.Request.create Params.init_pointer in
+        Params.key_set p (Codec.Key.encode key);
+        let+ x = Capability.call_for_value_exn tree method_id req in
+        Results.exists_get x
+
+      let mem_tree tree key =
+        let open Raw.Client.Tree.MemTree in
+        Logs.info (fun l -> l "Tree.mem_tree");
+        let req, p = Capability.Request.create Params.init_pointer in
+        Params.key_set p (Codec.Key.encode key);
+        let+ x = Capability.call_for_value_exn tree method_id req in
+        Results.exists_get x
+
+      let concrete tree =
+        let open Raw.Client.Tree.GetConcrete in
+        Logs.info (fun l -> l "Tree.concrete");
+        let req = Capability.Request.create_no_args () in
+        let+ x = Capability.call_for_value_exn tree method_id req in
+        let concrete = Results.concrete_get x in
+        Codec.Tree.decode concrete
+
+      let find_hash t key =
+        let open Raw.Client.Tree.FindHash in
+        log_key (module Store) "Tree.find_hash" key;
+        let req, p = Capability.Request.create Params.init_pointer in
+        Codec.Key.encode key |> Params.key_set p;
+        let+ res = Capability.call_for_value_exn t method_id req in
+        match Results.has_hash res with
+        | true -> Some (Results.hash_get res |> Codec.Hash.decode |> unwrap)
+        | false -> None
+
+      let remove t key =
+        let open Raw.Client.Tree.Remove in
+        log_key (module Store) "Tree.remove" key;
+        let req, p = Capability.Request.create Params.init_pointer in
+        Codec.Key.encode key |> Params.key_set p;
+        Capability.call_for_caps t method_id req Results.tree_get_pipelined
+        |> Lwt.return
+    end
+
+    module St = Store
+
     module Store = struct
-      include Types
-
-      type branch = Store.branch
-
-      type key = Store.key
-
-      type contents = Store.contents
-
-      type hash = Store.hash
-
-      type step = Store.Key.step
+      type t = store
 
       let master t =
         let open Raw.Client.Repo.Master in
@@ -88,13 +272,23 @@ functor
         | Ok None -> invalid_arg "Irmin_rpc: no blob found during get"
         | Error (`Msg m) -> raise (Remote_error m)
 
-      let find_tree t key =
-        let open Raw.Client.Store.FindTree in
-        log_key (module Store) "Store.find_tree" key;
+      let get_tree t key =
+        let open Raw.Client.Store.GetTree in
+        log_key (module Store) "Store.get_tree" key;
         let req, p = Capability.Request.create Params.init_pointer in
         Codec.Key.encode key |> Params.key_set p;
         Capability.call_for_caps t method_id req Results.tree_get_pipelined
         |> Lwt.return
+
+      let find_hash t key =
+        let open Raw.Client.Store.FindHash in
+        log_key (module Store) "Store.find_hash" key;
+        let req, p = Capability.Request.create Params.init_pointer in
+        Codec.Key.encode key |> Params.key_set p;
+        let+ res = Capability.call_for_value_exn t method_id req in
+        match Results.has_hash res with
+        | true -> Some (Results.hash_get res |> Codec.Hash.decode |> unwrap)
+        | false -> None
 
       let set ~info t key contents =
         let open Raw.Client.Store.Set in
@@ -174,152 +368,125 @@ functor
         Params.key_set p (Codec.Key.encode key);
         Lwt.return
         @@ Capability.call_for_caps t method_id req Results.commit_get_pipelined
+    end
 
-      module Branch = struct
-        let list t =
-          let open Raw.Client.Repo.BranchList in
-          Logs.info (fun l -> l "Branch.list");
-          let req = Capability.Request.create_no_args () in
-          let+ res = Capability.call_for_value_exn t method_id req in
-          Results.branches_get_list res
-          |> List.map (Codec.Branch.decode >> unwrap)
+    module Pack = struct
+      type t = pack
 
-        let remove t branch =
-          let open Raw.Client.Repo.BranchRemove in
-          Logs.info (fun l ->
-              l "Branch.remove: %a" (Irmin.Type.pp Store.Branch.t) branch);
-          let req, p = Capability.Request.create Params.init_pointer in
-          branch |> Codec.Branch.encode |> Params.branch_set p;
-          let+ _ = Capability.call_for_value_exn t method_id req in
-          ()
+      let integrity_check ?(auto_repair = false) t =
+        let open Raw.Client.Pack.IntegrityCheck in
+        Logs.info (fun l -> l "Pack.integrity_check");
+        let req, p = Capability.Request.create Params.init_pointer in
+        Params.auto_repair_set p auto_repair;
+        Params.pack_set p (Some t);
+        let* x = Capability.call_for_value_exn t method_id req in
+        let results = Results.result_get x in
+        Lwt.return
+        @@
+        let open Raw.Reader.Pack.IntegrityCheckResult in
+        match Raw.Reader.Pack.IntegrityCheckResult.get results with
+        | NoError -> Ok `No_error
+        | Fixed n -> Ok (`Fixed (Int64.to_int n))
+        | Corrupted n -> Error (`Corrupted (Int64.to_int n))
+        | CannotFix m -> Error (`Cannot_fix m)
+        | Undefined x -> failwith ("undefined: " ^ string_of_int x)
+    end
 
-        let set t branch commit =
-          let open Raw.Client.Repo.BranchSet in
-          Logs.info (fun l ->
-              l "Branch.set: %a" (Irmin.Type.pp Store.Branch.t) branch);
-          let req, p = Capability.Request.create Params.init_pointer in
-          branch |> Codec.Branch.encode |> Params.branch_set p;
-          Params.commit_set p (Some commit);
-          let+ _ = Capability.call_for_value_exn t method_id req in
-          ()
-      end
+    module Branch = struct
+      include St.Branch
 
-      module Commit = struct
-        let of_hash repo hash : commit Lwt.t =
-          let open Raw.Client.Repo.CommitOfHash in
-          Logs.info (fun l ->
-              l "Commit.of_hash: %a" (Irmin.Type.pp Store.Hash.t) hash);
-          let req, p = Capability.Request.create Params.init_pointer in
-          Params.hash_set p (Codec.Hash.encode hash);
-          Lwt.return
-          @@ Capability.call_for_caps repo method_id req
-               Results.commit_get_pipelined
+      let list t =
+        let open Raw.Client.Repo.BranchList in
+        Logs.info (fun l -> l "Branch.list");
+        let req = Capability.Request.create_no_args () in
+        let+ res = Capability.call_for_value_exn t method_id req in
+        Results.branches_get_list res |> List.map (Codec.Branch.decode >> unwrap)
 
-        let hash commit =
-          let open Raw.Client.Commit.Hash in
-          Logs.info (fun l -> l "Commit.hash");
-          let req = Capability.Request.create_no_args () in
-          let+ res = Capability.call_for_value_exn commit method_id req in
-          Results.hash_get res |> Codec.Hash.decode |> Result.get_ok
+      let remove t branch =
+        let open Raw.Client.Repo.BranchRemove in
+        Logs.info (fun l ->
+            l "Branch.remove: %a" (Irmin.Type.pp St.Branch.t) branch);
+        let req, p = Capability.Request.create Params.init_pointer in
+        branch |> Codec.Branch.encode |> Params.branch_set p;
+        let+ _ = Capability.call_for_value_exn t method_id req in
+        ()
 
-        let info commit =
-          let open Raw.Client.Commit.Info in
-          Logs.info (fun l -> l "Commit.info");
-          let req = Capability.Request.create_no_args () in
-          let+ res = Capability.call_for_value_exn commit method_id req in
-          Results.info_get res |> Codec.Info.decode
+      let set t branch commit =
+        let open Raw.Client.Repo.BranchSet in
+        Logs.info (fun l ->
+            l "Branch.set: %a" (Irmin.Type.pp St.Branch.t) branch);
+        let req, p = Capability.Request.create Params.init_pointer in
+        branch |> Codec.Branch.encode |> Params.branch_set p;
+        Params.commit_set p (Some commit);
+        let+ _ = Capability.call_for_value_exn t method_id req in
+        ()
+    end
 
-        let tree commit =
-          let open Raw.Client.Commit.Tree in
-          Logs.info (fun l -> l "Commit.tree");
-          let req = Capability.Request.create_no_args () in
-          Capability.call_for_caps commit method_id req
-            Results.tree_get_pipelined
-          |> Lwt.return
+    module Contents = struct
+      include St.Contents
 
-        let parents commit =
-          let open Raw.Client.Commit.Parents in
-          Logs.info (fun l -> l "Commit.parents");
-          let req = Capability.Request.create_no_args () in
-          let+ res = Capability.call_for_value_exn commit method_id req in
-          Results.hashes_get_list res
-          |> List.map (fun x -> Codec.Hash.decode x |> Result.get_ok)
-      end
+      module Cache =
+        Lru.M.Make
+          (struct
+            type t = hash
 
-      module Sync = struct
-        type endpoint = Remote.t
+            let equal a b = Irmin.Type.unstage (Irmin.Type.equal St.Hash.t) a b
 
-        let clone t endpoint =
-          let open Raw.Client.Sync.Clone in
-          let (module Remote) = remote in
-          Logs.info (fun l -> l "Sync.clone");
-          let req, p = Capability.Request.create Params.init_pointer in
-          Params.endpoint_set p (Remote.encode endpoint);
-          Capability.call_for_caps t method_id req Results.result_get_pipelined
-          |> Lwt.return
+            let hash = St.Hash.short_hash
+          end)
+          (struct
+            type t = contents
 
-        let pull t ~info endpoint =
-          let open Raw.Client.Sync.Pull in
-          let (module Remote) = remote in
-          Logs.info (fun l -> l "Sync.pull");
-          let req, p = Capability.Request.create Params.init_pointer in
-          Params.endpoint_set p (Remote.encode endpoint);
-          let _ = Params.info_set_builder p (Codec.Info.encode @@ info ()) in
-          Capability.call_for_caps t method_id req Results.result_get_pipelined
-          |> Lwt.return
+            let weight _ = 0
+          end)
 
-        let decode_push_result t =
-          let open Raw.Reader.Sync.PushResult in
-          match get t with
-          | OkEmpty -> Lwt.return @@ Ok `Empty
-          | OkHead head ->
-              let hash : hash = Codec.Hash.decode head |> unwrap in
-              Lwt.return @@ Ok (`Head hash)
-          | ErrorDetachedHead -> Lwt.return @@ Error `Detached_head
-          | ErrorMsg msg -> Lwt.return @@ Error (`Msg msg)
-          | Undefined _ -> Lwt.return @@ Error (`Msg "Undefined")
+      let cache = Cache.create 16
 
-        let push t endpoint =
-          let open Raw.Client.Sync.Push in
-          let (module Remote) = remote in
-          Logs.info (fun l -> l "Sync.push");
-          let req, p = Capability.Request.create Params.init_pointer in
-          Params.endpoint_set p (Remote.encode endpoint);
-          let* (x : Results.t) =
-            Capability.call_for_value_exn t method_id req
-          in
-          let x = Results.result_get x in
-          decode_push_result x
-      end
+      let of_hash store hash =
+        let open Raw.Client.Store.ContentsOfHash in
+        Logs.info (fun l -> l "Contents.of_hash");
+        match Cache.find hash cache with
+        | Some x -> Lwt.return (Some x)
+        | None ->
+            let req, p = Capability.Request.create Params.init_pointer in
+            Params.hash_set p (Codec.Hash.encode hash);
+            let+ x = Capability.call_for_value_exn store method_id req in
+            if Results.has_contents x then
+              let c = Results.contents_get x in
+              let c = Codec.Contents.decode c |> unwrap in
+              let () = Cache.add hash c cache in
+              Some c
+            else None
 
-      module Pack = struct
-        let integrity_check ?(auto_repair = false) t =
-          let open Raw.Client.Pack.IntegrityCheck in
-          Logs.info (fun l -> l "Pack.integrity_check");
-          let req, p = Capability.Request.create Params.init_pointer in
-          Params.auto_repair_set p auto_repair;
-          Params.pack_set p (Some t);
-          let* x = Capability.call_for_value_exn t method_id req in
-          let results = Results.result_get x in
-          Lwt.return
-          @@
-          let open Raw.Reader.Pack.IntegrityCheckResult in
-          match Raw.Reader.Pack.IntegrityCheckResult.get results with
-          | NoError -> Ok `No_error
-          | Fixed n -> Ok (`Fixed (Int64.to_int n))
-          | Corrupted n -> Error (`Corrupted (Int64.to_int n))
-          | CannotFix m -> Error (`Cannot_fix m)
-          | Undefined x -> failwith ("undefined: " ^ string_of_int x)
-      end
+      let find store key =
+        let+ hash = Store.find_hash store key in
+        match hash with
+        | None -> None
+        | Some x ->
+            Some
+              (fun () ->
+                let+ x = of_hash store x in
+                Option.get x)
+    end
 
-      module Tree = struct
-        let exists tree =
-          let open Raw.Client.Tree.Exists in
-          Logs.info (fun l -> l "Tree.exists");
-          let req = Capability.Request.create_no_args () in
-          let+ res = Capability.call_for_value_exn tree method_id req in
-          Results.ok_get res
-      end
+    module Repo = struct
+      type t = repo
+
+      let contents_of_hash repo h =
+        let open Raw.Client.Repo.ContentsOfHash in
+        Logs.info (fun l -> l "Repo.contents_of_hash");
+        match Contents.(Cache.find h cache) with
+        | Some x -> Lwt.return (Some x)
+        | None ->
+            let req, p = Capability.Request.create Params.init_pointer in
+            Params.hash_set p (Codec.Hash.encode h);
+            let+ x = Capability.call_for_value_exn repo method_id req in
+            if Results.has_contents x then
+              let c = Results.contents_get x in
+              let c = Codec.Contents.decode c |> unwrap in
+              let () = Contents.(Cache.add h c cache) in
+              Some c
+            else None
     end
 
     let repo t =

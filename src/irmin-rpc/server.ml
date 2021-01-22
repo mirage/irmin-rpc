@@ -78,45 +78,159 @@ functor
     module Tree = struct
       type t = Raw.Client.Tree.t cap
 
-      let read repo (t : t) =
-        let open Raw.Client.Tree.Hash in
-        let req = Capability.Request.create_no_args () in
-        let* res = Capability.call_for_value_exn t method_id req in
-        let str = Results.hash_get res |> Codec.Hash.decode |> unwrap in
-        St.Tree.of_hash repo str
+      let trees = Hashtbl.create 8
 
-      let local tree =
+      let read (t : t) = Hashtbl.find trees t
+
+      let rec local' (tree : St.tree) =
         let module Tree = Raw.Service.Tree in
         object
           inherit Tree.service
 
-          method find_impl _params _release_param_caps = assert false
-
-          method set_impl _params _release_param_caps = assert false
-
-          method find_tree_impl _params _release_param_caps = assert false
-
-          method set_tree_impl _params _release_param_caps = assert false
-
-          method mem_impl _params _release_param_caps = assert false
-
-          method mem_tree_impl _params _release_param_caps = assert false
-
-          method get_concrete_impl _params _release_param_caps = assert false
-
-          method hash_impl _params _release_param_caps = assert false
-
-          method exists_impl _params release_param_caps =
-            let open Tree.Exists in
+          method find_impl params release_param_caps =
+            let open Tree.Find in
+            let key = Params.key_get params |> Codec.Key.decode in
             release_param_caps ();
-            Logs.info (fun f -> f "Tree.exists");
+            Logs.info (fun f -> f "Tree.find");
             with_initialised_results
               (module Results)
               (fun results ->
-                Results.ok_set results (Option.is_some tree);
+                let* c = St.Tree.find tree (unwrap key) in
+                let () =
+                  Option.iter
+                    (fun x ->
+                      Results.contents_set results
+                        (Irmin.Type.to_string St.contents_t x))
+                    c
+                in
+                Lwt.return (Ok ()))
+
+          method find_hash_impl params release_param_caps =
+            let open Tree.FindHash in
+            let key = Params.key_get params |> Codec.Key.decode in
+            release_param_caps ();
+            log_key_result (module St) "Tree.find_hash" key;
+            with_initialised_results
+              (module Results)
+              (fun results ->
+                let+ x = St.Tree.find tree (unwrap key) in
+                Option.iter
+                  (fun x ->
+                    let hash = St.Contents.hash x in
+                    Codec.Hash.encode hash |> Results.hash_set results)
+                  x;
+                Ok ())
+
+          method add_impl params release_param_caps =
+            let open Tree.Add in
+            let key = Params.key_get params |> Codec.Key.decode in
+            let contents = Params.contents_get params in
+            release_param_caps ();
+            log_key_result (module St) "Tree.add" key;
+            with_initialised_results
+              (module Results)
+              (fun results ->
+                let contents = contents |> Codec.Contents.decode |> unwrap in
+                let+ tree = St.Tree.add tree (unwrap key) contents in
+                Results.tree_set results (Some (local tree));
+                Ok ())
+
+          method get_tree_impl params release_param_caps =
+            let open Tree.GetTree in
+            let key = Params.key_get params |> Codec.Key.decode in
+            release_param_caps ();
+            Logs.info (fun f -> f "Tree.get_tree");
+            with_initialised_results
+              (module Results)
+              (fun results ->
+                let* (c : St.tree option) =
+                  St.Tree.find_tree tree (unwrap key)
+                in
+                Option.iter
+                  (fun c -> Results.tree_set results (Some (local c)))
+                  c;
+                Lwt.return (Ok ()))
+
+          method add_tree_impl params release_param_caps =
+            let open Tree.AddTree in
+            let key = Params.key_get params |> Codec.Key.decode in
+            let tr = Params.tree_get params in
+            release_param_caps ();
+            log_key_result (module St) "Tree.add_tree" key;
+            with_initialised_results
+              (module Results)
+              (fun results ->
+                let tr = read (Option.get tr) in
+                let+ tt = St.Tree.add_tree tree (unwrap key) tr in
+                Results.tree_set results (Some (local tt));
+                Ok ())
+
+          method mem_impl params release_param_caps =
+            let open Tree.Mem in
+            let key = Params.key_get params |> Codec.Key.decode in
+            release_param_caps ();
+            Logs.info (fun f -> f "Tree.mem");
+            with_initialised_results
+              (module Results)
+              (fun results ->
+                let* e = St.Tree.mem tree (unwrap key) in
+                Results.exists_set results e;
+                Lwt.return (Ok ()))
+
+          method mem_tree_impl params release_param_caps =
+            let open Tree.MemTree in
+            let key = Params.key_get params |> Codec.Key.decode in
+            release_param_caps ();
+            Logs.info (fun f -> f "Tree.mem_tree");
+            with_initialised_results
+              (module Results)
+              (fun results ->
+                let* e = St.Tree.mem_tree tree (unwrap key) in
+                Results.exists_set results e;
+                Lwt.return (Ok ()))
+
+          method get_concrete_impl _params release_param_caps =
+            let open Tree.GetConcrete in
+            release_param_caps ();
+            Logs.info (fun f -> f "Tree.get_concrete");
+            with_initialised_results
+              (module Results)
+              (fun results ->
+                let* c = Codec.Tree.of_irmin_tree tree in
+                let* c = Codec.Tree.encode c in
+                ignore (Results.concrete_set_builder results c);
+                Lwt.return (Ok ()))
+
+          method hash_impl _params release_param_caps =
+            let open Tree.Hash in
+            release_param_caps ();
+            Logs.info (fun f -> f "Tree.hash");
+            with_initialised_results
+              (module Results)
+              (fun results ->
+                let hash = St.Tree.hash tree in
+                Results.hash_set results (Codec.Hash.encode hash);
+                Lwt.return @@ Ok ())
+
+          method remove_impl params release_param_caps =
+            let open Tree.Remove in
+            let key = Params.key_get params |> Codec.Key.decode in
+            release_param_caps ();
+            log_key_result (module St) "Repo.remove" key;
+            with_initialised_results
+              (module Results)
+              (fun results ->
+                let* tree = St.Tree.remove tree (unwrap key) in
+                Results.tree_set results (Some (local tree));
                 Lwt.return @@ Ok ())
         end
         |> Tree.local
+
+      and local tree =
+        let x = local' tree in
+        Capability.when_released x (fun () -> Hashtbl.remove trees x);
+        Hashtbl.replace trees x tree;
+        x
     end
 
     module Commit = struct
@@ -140,7 +254,8 @@ functor
             with_initialised_results
               (module Results)
               (fun results ->
-                let tree = St.Commit.tree commit |> Option.some |> Tree.local in
+                let tree = St.Commit.tree commit in
+                let tree = Tree.local tree in
                 let _ = Results.tree_set results (Some tree) in
                 Capability.dec_ref tree;
                 Lwt.return @@ Ok ())
@@ -348,18 +463,34 @@ functor
                   x;
                 Ok ())
 
-          method find_tree_impl params release_param_caps =
-            let open Store.FindTree in
+          method find_hash_impl params release_param_caps =
+            let open Store.FindHash in
             let key = Params.key_get params |> Codec.Key.decode in
             release_param_caps ();
-            log_key_result (module St) "Store.find_tree" key;
+            log_key_result (module St) "Store.find_hash" key;
+            with_initialised_results
+              (module Results)
+              (fun results ->
+                let+ x = St.find store (unwrap key) in
+                Option.iter
+                  (fun x ->
+                    let hash = St.Contents.hash x in
+                    Codec.Hash.encode hash |> Results.hash_set results)
+                  x;
+                Ok ())
+
+          method get_tree_impl params release_param_caps =
+            let open Store.GetTree in
+            let key = Params.key_get params |> Codec.Key.decode in
+            release_param_caps ();
+            log_key_result (module St) "Store.get_tree" key;
             with_initialised_results
               (module Results)
               (fun results ->
                 let+ () =
-                  St.find_tree store (unwrap key) >|= fun tree ->
+                  St.get_tree store (unwrap key) >|= fun tree ->
                   let x = Tree.local tree in
-                  Results.tree_set results (Some x);
+                  let () = Results.tree_set results (Some x) in
                   Capability.dec_ref x
                 in
                 Ok ())
@@ -389,11 +520,9 @@ functor
             log_key_result (module St) "Store.set_tree" key;
             Service.return_lwt (fun () ->
                 let info = info |> Codec.Info.decode in
-                let* tree = Tree.read (St.repo store) (Option.get tree) in
+                let tree = Tree.read (Option.get tree) in
                 let+! () =
-                  St.set_tree
-                    ~info:(fun () -> info)
-                    store (unwrap key) (Option.get tree)
+                  St.set_tree ~info:(fun () -> info) store (unwrap key) tree
                   |> process_write_error
                 in
                 Service.Response.create_empty ())
@@ -500,6 +629,24 @@ functor
                     Results.commit_set results (Some commit);
                     Capability.dec_ref commit;
                     Ok ())
+
+          method contents_of_hash_impl params release_param_caps =
+            let open Store.ContentsOfHash in
+            let hash = Params.hash_get params in
+            release_param_caps ();
+            Logs.info (fun f -> f "Store.contents_of_hash: %s" hash);
+            with_initialised_results
+              (module Results)
+              (fun results ->
+                let hash = hash |> Codec.Hash.decode |> unwrap in
+                let+ contents = St.Contents.of_hash (St.repo store) hash in
+                Option.iter
+                  (fun c ->
+                    let s = Irmin.Type.to_string St.contents_t c in
+
+                    Results.contents_set results s)
+                  contents;
+                Ok ())
         end
         |> Store.local
     end
@@ -590,7 +737,7 @@ functor
               (fun results ->
                 let hash = hash |> Codec.Hash.decode |> unwrap in
                 let+ commit = St.Commit.of_hash repo hash in
-                let commit = Option.map Commit.local commit in
+                let commit = Option.map (fun c -> Commit.local c) commit in
                 Results.commit_set results commit;
                 Option.iter Capability.dec_ref commit;
                 Ok ())
@@ -612,6 +759,16 @@ functor
                     Results.contents_set results s)
                   contents;
                 Ok ())
+
+          method empty_tree_impl _params release_param_caps =
+            let open Repo.EmptyTree in
+            release_param_caps ();
+            Logs.info (fun f -> f "Repo.empty_tree");
+            with_initialised_results
+              (module Results)
+              (fun results ->
+                Results.tree_set results (Some (Tree.local St.Tree.empty));
+                Lwt.return @@ Ok ())
         end
         |> Repo.local
     end

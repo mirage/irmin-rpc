@@ -1,4 +1,3 @@
-open Lwt.Infix
 open Common
 module Client = Rpc.Client
 
@@ -19,20 +18,14 @@ let main =
   let* client = Uri.of_string uri |> Client.connect in
   let* repo = Client.repo client in
   let* master = Client.Store.master repo in
-  Client.ping client >>= fun x ->
-  let () = Result.get_ok x in
-  let* () = Client.Store.set ~info master [ "abc" ] "123" in
-  let* res = Client.Store.get master [ "abc" ] in
-  assert (res = "123");
-  print_endline res;
-  let* tree = Client.Store.get_tree master [ "abc" ] in
-  let* concrete = Client.Tree.concrete tree in
-  assert (match concrete with `Contents _ -> true | _ -> false);
-  (*let* l = Store.Tree.list tree [] in
-    assert (List.length l = 1);*)
-  (*let* pack = Client.Store.pack master in
-    let* check = Client.Store.Pack.integrity_check (Option.get pack) in
-    assert (Result.is_ok check);*)
+  let* tree = Client.Tree.empty repo in
+  let* tree = Client.Tree.add tree [ "a" ] "1" in
+  let* tree = Client.Tree.add tree [ "x"; "y"; "z" ] "999" in
+  let* () = Client.Store.set_tree master ~info [] tree in
+  let* a = Client.Store.get master [ "a" ] in
+  assert (a = "1");
+  let* xyz = Client.Store.get master [ "x"; "y"; "z" ] in
+  assert (xyz = "999");
   Lwt.return ()
 
 let () = Lwt_main.run main
