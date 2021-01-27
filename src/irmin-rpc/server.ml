@@ -216,7 +216,7 @@ functor
             let open Tree.Remove in
             let key = Params.key_get params |> Codec.Key.decode in
             release_param_caps ();
-            log_key_result (module St) "Repo.remove" key;
+            log_key_result (module St) "Tree.remove" key;
             with_initialised_results
               (module Results)
               (fun results ->
