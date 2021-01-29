@@ -202,7 +202,8 @@ module type S = sig
         the server for every request *)
 
     val find : store -> key -> (unit -> contents Lwt.t) option Lwt.t
-    (** Get a lazy contents handle for the specified key *)
+    (** Returns a function that returns the contents associated with the
+        specified key, if available *)
   end
 
   module Repo : sig

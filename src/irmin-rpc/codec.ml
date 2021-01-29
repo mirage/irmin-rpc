@@ -27,6 +27,12 @@ module Make (Store : Irmin.S) = struct
     type t = Store.key
 
     let encode, decode = codec_of_type Store.Key.t
+
+    module Step = struct
+      type t = Store.step
+
+      let encode, decode = codec_of_type Store.Key.step_t
+    end
   end
 
   module Hash = struct
@@ -65,37 +71,6 @@ module Make (Store : Irmin.S) = struct
   module Tree = struct
     type t = [ `Contents of Store.hash | `Tree of (Store.step * t) list ]
 
-    (*let rec encode (tree : Store.tree) : Raw.Builder.Tree.t Lwt.t =
-      let module B = Raw.Builder in
-      let module R = Raw.Reader in
-      let contents key value tr =
-        Irmin.Type.to_string Store.key_t key |> B.Tree.key_set tr;
-        Irmin.Type.to_string Store.Hash.t (Store.Contents.hash value)
-        |> B.Tree.contents_set tr;
-        Lwt.return tr
-      in
-      let node key node tr =
-        Irmin.Type.to_string Store.key_t key |> B.Tree.key_set tr;
-        let* items =
-          Store.Tree.list (Store.Tree.of_node node) Store.Key.empty
-        in
-        let* l =
-          Lwt_list.map_p
-            (fun (step, tree) ->
-              let node = B.Node.init_root () in
-              Irmin.Type.to_string Store.step_t step |> B.Node.step_set node;
-              let+ x = encode tree in
-              ignore (B.Node.tree_set_builder node x);
-              node)
-            items
-        in
-        let (_ : (Irmin_api.rw, B.Node.t, R.builder_array_t) Capnp.Array.t) =
-          B.Tree.node_set_list tr l
-        in
-        Lwt.return tr
-      in
-      let tr = Raw.Builder.Tree.init_root () in
-      Store.Tree.fold tree ~contents ~node tr*)
     let rec of_irmin_tree (x : Store.tree) : t Lwt.t =
       let* t = Store.Tree.to_concrete x in
       match t with
@@ -134,10 +109,10 @@ module Make (Store : Irmin.S) = struct
       let rec inner tr key (tree : t) =
         let module B = Raw.Builder in
         let module R = Raw.Reader in
-        Irmin.Type.to_string Store.key_t key |> B.Tree.Concrete.key_set tr;
+        B.Tree.Concrete.key_set tr (Key.encode key);
         match tree with
         | `Contents hash ->
-            let s = Irmin.Type.to_string Store.Hash.t hash in
+            let s = Hash.encode hash in
             ignore (B.Tree.Concrete.contents_set tr s);
             Lwt.return_unit
         | `Tree l ->
@@ -145,8 +120,7 @@ module Make (Store : Irmin.S) = struct
               Lwt_list.map_p
                 (fun (step, tree) ->
                   let node = B.Tree.Node.init_root () in
-                  Irmin.Type.to_string Store.step_t step
-                  |> B.Tree.Node.step_set node;
+                  B.Tree.Node.step_set node (Key.Step.encode step);
                   let tt = B.Tree.Concrete.init_root () in
                   let+ () = inner tt (Store.Key.rcons key step) tree in
                   node)
@@ -173,16 +147,12 @@ module Make (Store : Irmin.S) = struct
         | Node l ->
             Capnp.Array.to_list l
             |> List.map (fun node ->
-                   let step =
-                     Node.step_get node
-                     |> Irmin.Type.of_string Store.step_t
-                     |> unwrap
-                   in
+                   let step = Node.step_get node |> Key.Step.decode |> unwrap in
                    let tree = Node.tree_get node |> inner in
                    (step, tree))
             |> fun t -> `Tree t
         | Contents c ->
-            let hash = Irmin.Type.of_string Store.Hash.t c |> unwrap in
+            let hash = Hash.decode c |> unwrap in
             `Contents hash
         | Undefined _ -> `Tree []
       in

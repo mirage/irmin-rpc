@@ -18,7 +18,11 @@ end
 module type MAKER = functor (Store : Irmin.S) -> sig
   module Branch : SERIALISABLE with type t = Store.branch
 
-  module Key : SERIALISABLE with type t = Store.key
+  module Key : sig
+    module Step : SERIALISABLE with type t = Store.step
+
+    include SERIALISABLE with type t = Store.key
+  end
 
   module Hash : SERIALISABLE with type t = Store.hash
 

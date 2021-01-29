@@ -11,7 +11,7 @@ let config path =
   Irmin_git.config ~head path
 
 let run (Irmin_unix.Resolver.S ((module Store), store, _)) host port secret_key
-    address_file =
+    address_file insecure =
   let module Rpc =
     Irmin_rpc_unix.Make
       (Store)
@@ -21,9 +21,10 @@ let run (Irmin_unix.Resolver.S ((module Store), store, _)) host port secret_key
   let secret_key =
     match secret_key with Some key -> `File key | None -> `Ephemeral
   in
+  let secure = not insecure in
   let p =
     store >>= fun store ->
-    Rpc.Server.serve ~secret_key (`TCP (host, port)) (Store.repo store)
+    Rpc.Server.serve ~secure ~secret_key (`TCP (host, port)) (Store.repo store)
     >>= fun server ->
     let () =
       match address_file with
@@ -62,6 +63,10 @@ let address_file =
     & opt (some string) None
     & info [ "f"; "address-file" ] ~docv:"FILENAME" ~doc)
 
+let insecure =
+  let doc = "Disable SSL and other security features" in
+  Arg.(value & flag & info [ "insecure" ] ~doc)
+
 let main_t =
   Term.(
     const run
@@ -69,6 +74,7 @@ let main_t =
     $ host
     $ port
     $ secret_key
-    $ address_file)
+    $ address_file
+    $ insecure)
 
 let () = Term.exit @@ Term.eval (main_t, Term.info "irmin-rpc")

@@ -22,10 +22,15 @@ struct
       let net = Capnp_rpc_mirage.network ~dns stack in
       let public_address = `TCP (addr, port) in
       let config =
-        Capnp_rpc_mirage.Vat_config.create ~secret_key ?serve_tls
-          ~public_address (`TCP port)
+        Capnp_rpc_mirage.Vat_config.create ~public_address ~secret_key
+          ?serve_tls (`TCP port)
       in
-      let service_id = Capnp_rpc_mirage.Vat_config.derived_id config "main" in
+      let service_id =
+        match serve_tls with
+        | Some true | None ->
+            Capnp_rpc_mirage.Vat_config.derived_id config "main"
+        | Some false -> Capnp_rpc_net.Restorer.Id.public ""
+      in
       let restore =
         Capnp_rpc_net.Restorer.single service_id (Rpc.Server.local repo)
       in

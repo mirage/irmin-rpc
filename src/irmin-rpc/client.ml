@@ -24,6 +24,8 @@ functor
   struct
     module Codec = Codec.Make (Store)
     include Types
+    module Key = Store.Key
+    module Hash = Store.Hash
 
     type t = Raw.Client.Irmin.t Capability.t
 
@@ -37,9 +39,6 @@ functor
 
     type step = Store.Key.step
 
-    module Key = Store.Key
-    module Hash = Store.Hash
-
     let remote =
       match Remote.v with
       | Some x -> x
@@ -47,7 +46,7 @@ functor
           ( module struct
             type t = Store.Private.Sync.endpoint
 
-            let fail () = failwith "SYNC API is unimplemented"
+            let fail () = failwith "Sync API is not available"
 
             let decode _ = fail ()
 
