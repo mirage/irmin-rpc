@@ -99,8 +99,7 @@ functor
                 let () =
                   Option.iter
                     (fun x ->
-                      Results.contents_set results
-                        (Irmin.Type.to_string St.contents_t x))
+                      Results.contents_set results (Codec.Contents.encode x))
                     c
                 in
                 Lwt.return (Ok ()))
@@ -642,8 +641,7 @@ functor
                 let+ contents = St.Contents.of_hash (St.repo store) hash in
                 Option.iter
                   (fun c ->
-                    let s = Irmin.Type.to_string St.contents_t c in
-
+                    let s = Codec.Contents.encode c in
                     Results.contents_set results s)
                   contents;
                 Ok ())
@@ -754,8 +752,7 @@ functor
                 let+ contents = St.Contents.of_hash repo hash in
                 Option.iter
                   (fun c ->
-                    let s = Irmin.Type.to_string St.contents_t c in
-
+                    let s = Codec.Contents.encode c in
                     Results.contents_set results s)
                   contents;
                 Ok ())
