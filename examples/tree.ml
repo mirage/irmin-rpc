@@ -26,6 +26,9 @@ let main =
   assert (Option.get a = "1");
   let* xyz = Client.Tree.find tree [ "x"; "y"; "z" ] in
   assert (Option.get xyz = "999");
+  let* t = Client.Tree.get_tree tree [ "x"; "y" ] in
+  let* z = Client.Tree.find t [ "z" ] in
+  assert (Option.get z = "999");
 
   let* tree = Client.Tree.remove tree [ "a" ] in
 

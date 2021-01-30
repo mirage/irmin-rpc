@@ -6,7 +6,6 @@ let () =
   Logs.set_reporter (Logs_fmt.reporter ())
 
 let main =
-  print_endline Sys.argv.(1);
   let secure =
     if Array.length Sys.argv > 1 then not (Sys.argv.(1) = "insecure") else true
   in
