@@ -17,7 +17,6 @@ depends: [
   "fmt"
   "irmin" {>= "2.3.0"}
   "lwt"
-  "lru"
   "result" {>= "1.5"}
   "logs" {>= "0.7.0"}
   "repr" {>= "0.2.0"}

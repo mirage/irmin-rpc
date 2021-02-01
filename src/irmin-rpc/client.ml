@@ -424,38 +424,30 @@ functor
     module Contents = struct
       include St.Contents
 
-      module Cache =
-        Lru.M.Make
-          (struct
-            type t = hash
+      module Cache = Irmin.Private.Lru.Make (struct
+        type t = hash
 
-            let equal a b = Irmin.Type.unstage (Irmin.Type.equal St.Hash.t) a b
+        let equal a b = Irmin.Type.unstage (Irmin.Type.equal St.Hash.t) a b
 
-            let hash = St.Hash.short_hash
-          end)
-          (struct
-            type t = contents
-
-            let weight _ = 0
-          end)
+        let hash = St.Hash.short_hash
+      end)
 
       let cache = Cache.create 16
 
       let of_hash store hash =
         let open Raw.Client.Store.ContentsOfHash in
         Logs.info (fun l -> l "Contents.of_hash");
-        match Cache.find hash cache with
-        | Some x -> Lwt.return (Some x)
-        | None ->
-            let req, p = Capability.Request.create Params.init_pointer in
-            Params.hash_set p (Codec.Hash.encode hash);
-            let+ x = Capability.call_for_value_exn store method_id req in
-            if Results.has_contents x then
-              let c = Results.contents_get x in
-              let c = Codec.Contents.decode c |> unwrap in
-              let () = Cache.add hash c cache in
-              Some c
-            else None
+        if Cache.mem cache hash then Lwt.return_some (Cache.find cache hash)
+        else
+          let req, p = Capability.Request.create Params.init_pointer in
+          let () = Params.hash_set p (Codec.Hash.encode hash) in
+          let+ x = Capability.call_for_value_exn store method_id req in
+          if Results.has_contents x then
+            let c = Results.contents_get x in
+            let c = Codec.Contents.decode c |> unwrap in
+            let () = Cache.add cache hash c in
+            Some c
+          else None
 
       let find store key =
         let+ hash = Store.find_hash store key in
@@ -474,18 +466,18 @@ functor
       let contents_of_hash repo h =
         let open Raw.Client.Repo.ContentsOfHash in
         Logs.info (fun l -> l "Repo.contents_of_hash");
-        match Contents.(Cache.find h cache) with
-        | Some x -> Lwt.return (Some x)
-        | None ->
-            let req, p = Capability.Request.create Params.init_pointer in
-            Params.hash_set p (Codec.Hash.encode h);
-            let+ x = Capability.call_for_value_exn repo method_id req in
-            if Results.has_contents x then
-              let c = Results.contents_get x in
-              let c = Codec.Contents.decode c |> unwrap in
-              let () = Contents.(Cache.add h c cache) in
-              Some c
-            else None
+        if Contents.Cache.mem Contents.cache h then
+          Lwt.return_some (Contents.Cache.find Contents.cache h)
+        else
+          let req, p = Capability.Request.create Params.init_pointer in
+          let () = Params.hash_set p (Codec.Hash.encode h) in
+          let+ x = Capability.call_for_value_exn repo method_id req in
+          if Results.has_contents x then
+            let c = Results.contents_get x in
+            let c = Codec.Contents.decode c |> unwrap in
+            let () = Contents.(Cache.add cache h c) in
+            Some c
+          else None
     end
 
     let repo t =
