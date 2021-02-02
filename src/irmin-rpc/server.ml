@@ -628,23 +628,6 @@ functor
                     Results.commit_set results (Some commit);
                     Capability.dec_ref commit;
                     Ok ())
-
-          method contents_of_hash_impl params release_param_caps =
-            let open Store.ContentsOfHash in
-            let hash = Params.hash_get params in
-            release_param_caps ();
-            Logs.info (fun f -> f "Store.contents_of_hash: %s" hash);
-            with_initialised_results
-              (module Results)
-              (fun results ->
-                let hash = hash |> Codec.Hash.decode |> unwrap in
-                let+ contents = St.Contents.of_hash (St.repo store) hash in
-                Option.iter
-                  (fun c ->
-                    let s = Codec.Contents.encode c in
-                    Results.contents_set results s)
-                  contents;
-                Ok ())
         end
         |> Store.local
     end

@@ -164,8 +164,6 @@ interface Store {
 
   # Get a hash of the contents stored at `key`
   findHash @11 (key :Key) -> (hash :Hash);
-
-  contentsOfHash @12  (hash :Hash) -> (contents :Contents);
 }
 
 interface Repo {

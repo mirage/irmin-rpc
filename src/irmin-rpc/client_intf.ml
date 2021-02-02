@@ -197,20 +197,13 @@ module type S = sig
   module Contents : sig
     include Irmin.Contents.S with type t = contents
 
-    val of_hash : store -> hash -> contents option Lwt.t
+    val of_hash : repo -> hash -> contents option Lwt.t
     (** Get hash from contents, this function uses caching to avoid calling to
         the server for every request *)
 
-    val find : store -> key -> (unit -> contents Lwt.t) option Lwt.t
+    val find : store -> key -> (repo -> contents Lwt.t) option Lwt.t
     (** Returns a function that returns the contents associated with the
         specified key, if available *)
-  end
-
-  module Repo : sig
-    type t = repo
-
-    val contents_of_hash : repo -> hash -> contents option Lwt.t
-    (** Get contents for the specified hash, if present *)
   end
 
   val repo : t -> repo Lwt.t
