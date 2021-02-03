@@ -36,7 +36,7 @@ interface Tree {
   find @0 (key :Key) -> (contents :Contents);
 
   # Get the tree with a root at `key`
-  getTree @1 (key :Key) -> (tree :Tree);
+  findTree @1 (key :Key) -> (tree :Tree);
 
   # Add a value
   add @2 (key :Key, contents :Contents) -> (tree :Tree);
@@ -61,6 +61,11 @@ interface Tree {
 
   # Remove a value from the tree
   remove   @9  (key :Key) -> (tree :Tree);
+
+  listKeys @10 (key: Key) -> (keys :List(Key));
+
+  # Check if tree exists
+  check       @11 () -> (bool :Bool);
 }
 
 interface Commit {
@@ -84,6 +89,9 @@ interface Commit {
 
   # Get commit hash
   hash     @4  () -> (hash :Hash);
+
+  # Check if commit exists
+  check    @5 () -> (bool :Bool);
 }
 
 interface Sync {
@@ -125,7 +133,7 @@ interface Store {
   find      @0  (key :Key) -> (contents :Contents);
 
   # Get the tree with a root at `key`
-  getTree  @1  (key :Key) -> (tree :Tree);
+  findTree  @1  (key :Key) -> (tree :Tree);
 
   # Set `key` to `contents`
   set       @2  (key :Key,  contents :Contents, info :Info) -> ();

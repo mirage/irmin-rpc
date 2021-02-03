@@ -1,5 +1,5 @@
 # base
-FROM ocaml/opam2:debian-stable as base
+FROM ocaml/opam:4.10 as base
 RUN sudo apt-get update
 RUN sudo apt-get install -y m4 libgmp-dev perl libev-dev capnproto libcapnp-dev pkg-config
 RUN git -C /home/opam/opam-repository pull

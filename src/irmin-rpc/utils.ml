@@ -26,7 +26,7 @@ module String = struct
           &&
           match String.index_from_opt s from c with
           | Some i -> inner ~from:(i + 1) cs
-          | None -> false )
+          | None -> false)
     in
     inner ~from:0 (to_list sub)
 

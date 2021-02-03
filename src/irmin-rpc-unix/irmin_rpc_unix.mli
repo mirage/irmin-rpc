@@ -35,7 +35,13 @@ module Make
   end
 
   module Client : sig
-    include module type of Irmin_rpc.Client.Make (Store) (Remote) (Pack)
+    include
+      Irmin_rpc.Client.S
+        with type key = Store.key
+         and type step = Store.Key.step
+         and type hash = Store.hash
+         and type branch = Store.branch
+         and type contents = Store.contents
 
     val connect : Uri.t -> t Lwt.t
   end

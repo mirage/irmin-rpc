@@ -10,9 +10,9 @@ let errorf fmt = Format.kasprintf (fun m -> Error (`Msg m)) fmt
 let codec_of_type (type a) (t : a Irmin.Type.t) =
   let encode = Irmin.Type.to_string t
   and decode s =
-    ( Irmin.Type.of_string t s
+    (Irmin.Type.of_string t s
       : (a, [ `Msg of _ ]) result
-      :> (a, [> `Msg of _ ]) result )
+      :> (a, [> `Msg of _ ]) result)
   in
   (encode, decode)
 
@@ -189,7 +189,7 @@ module Make (Store : Irmin.S) = struct
           let+ commit = Store.Commit.of_hash repo hash in
           match commit with
           | Some c -> Ok c
-          | None -> Error (`Commit_not_found hash) )
+          | None -> Error (`Commit_not_found hash))
       | Error _ as e -> Lwt.return e
   end
 

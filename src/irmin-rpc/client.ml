@@ -2,6 +2,7 @@ include Client_intf
 open Capnp_rpc_lwt
 open Utils
 open Lwt.Syntax
+open Lwt.Infix
 
 module type S = S
 
@@ -43,7 +44,7 @@ functor
       match Remote.v with
       | Some x -> x
       | None ->
-          ( module struct
+          (module struct
             type t = Store.Private.Sync.endpoint
 
             let fail () = failwith "Sync API is not available"
@@ -51,10 +52,18 @@ functor
             let decode _ = fail ()
 
             let encode _ = fail ()
-          end )
+          end)
 
     module Commit = struct
       type t = commit
+
+      let check commit =
+        let open Raw.Client.Commit.Check in
+        Logs.info (fun l -> l "Commit.check");
+        let req = Capability.Request.create_no_args () in
+        Capability.call_for_value commit method_id req >|= function
+        | Ok res -> Results.bool_get res
+        | _ -> false
 
       let of_hash repo hash : commit Lwt.t =
         let open Raw.Client.Repo.CommitOfHash in
@@ -145,12 +154,22 @@ functor
     module Tree = struct
       type t = tree
 
+      type concrete = [ `Contents of hash | `Tree of (step * concrete) list ]
+
       let empty repo =
         let open Raw.Client.Repo.EmptyTree in
         Logs.info (fun l -> l "Tree.empty");
         let req = Capability.Request.create_no_args () in
         Capability.call_for_caps repo method_id req Results.tree_get_pipelined
         |> Lwt.return
+
+      let check tree =
+        let open Raw.Client.Tree.Check in
+        Logs.info (fun l -> l "Tree.check");
+        let req = Capability.Request.create_no_args () in
+        Capability.call_for_value tree method_id req >|= function
+        | Ok res -> Results.bool_get res
+        | _ -> false
 
       let find tree key =
         let open Raw.Client.Tree.Find in
@@ -162,12 +181,23 @@ functor
           Some (Results.contents_get x |> Codec.Contents.decode |> unwrap)
         else None
 
-      let get_tree tree key =
-        let open Raw.Client.Tree.GetTree in
-        Logs.info (fun l -> l "Tree.get_tree");
+      let find_tree tree key =
+        let open Raw.Client.Tree.FindTree in
+        Logs.info (fun l -> l "Tree.find_tree");
         let req, p = Capability.Request.create Params.init_pointer in
         Params.key_set p (Codec.Key.encode key);
-        Capability.call_for_caps tree method_id req Results.tree_get_pipelined
+        let cap =
+          Capability.call_for_caps tree method_id req Results.tree_get_pipelined
+        in
+        let+ ok = check cap in
+        if ok then Some cap else None
+
+      let get_tree t key =
+        let open Raw.Client.Tree.FindTree in
+        log_key (module Store) "Tree.find_tree" key;
+        let req, p = Capability.Request.create Params.init_pointer in
+        Codec.Key.encode key |> Params.key_set p;
+        Capability.call_for_caps t method_id req Results.tree_get_pipelined
         |> Lwt.return
 
       let add tree key value =
@@ -271,9 +301,20 @@ functor
         | Ok None -> invalid_arg "Irmin_rpc: no blob found during get"
         | Error (`Msg m) -> raise (Remote_error m)
 
+      let find_tree t key =
+        let open Raw.Client.Store.FindTree in
+        log_key (module Store) "Store.find_tree" key;
+        let req, p = Capability.Request.create Params.init_pointer in
+        Codec.Key.encode key |> Params.key_set p;
+        let cap =
+          Capability.call_for_caps t method_id req Results.tree_get_pipelined
+        in
+        let+ ok = Tree.check cap in
+        if ok then Some cap else None
+
       let get_tree t key =
-        let open Raw.Client.Store.GetTree in
-        log_key (module Store) "Store.get_tree" key;
+        let open Raw.Client.Store.FindTree in
+        log_key (module Store) "Store.find_tree" key;
         let req, p = Capability.Request.create Params.init_pointer in
         Codec.Key.encode key |> Params.key_set p;
         Capability.call_for_caps t method_id req Results.tree_get_pipelined

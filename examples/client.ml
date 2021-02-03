@@ -19,20 +19,19 @@ let main =
   let* client = Uri.of_string uri |> Client.connect in
   let* repo = Client.repo client in
   let* master = Client.Store.master repo in
-  Client.ping client >>= fun x ->
+  let* x = Client.ping client in
   let () = Result.get_ok x in
   let* () = Client.Store.set ~info master [ "abc" ] "123" in
   let* res = Client.Store.get master [ "abc" ] in
   assert (res = "123");
   print_endline res;
-  let* tree = Client.Store.get_tree master [ "abc" ] in
-  let* concrete = Client.Tree.concrete tree in
-  assert (match concrete with `Contents _ -> true | _ -> false);
-  (*let* l = Store.Tree.list tree [] in
-    assert (List.length l = 1);*)
-  (*let* pack = Client.Store.pack master in
-    let* check = Client.Store.Pack.integrity_check (Option.get pack) in
-    assert (Result.is_ok check);*)
+  let* tree = Client.Store.find_tree master [ "abc" ] in
+  let* concrete =
+    match tree with
+    | Some c -> Client.Tree.concrete c >>= Lwt.return_some
+    | None -> Lwt.return_none
+  in
+  assert (match concrete with Some (`Contents _) -> true | _ -> false);
   Lwt.return ()
 
 let () = Lwt_main.run main

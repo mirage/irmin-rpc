@@ -10,8 +10,8 @@ module type S = S
 
 module type MAKER = MAKER
 
-module Log = ( val Logs.src_log (Logs.Src.create "irmin.rpc" ~doc:"Irmin RPC")
-                 : Logs.LOG )
+module Log = (val Logs.src_log (Logs.Src.create "irmin.rpc" ~doc:"Irmin RPC")
+                : Logs.LOG)
 
 let ignore_result_set r =
   ignore (r : (Irmin_api.rw, string, Raw.Reader.builder_array_t) Capnp.Array.t)
@@ -42,13 +42,13 @@ functor
       match Remote.v with
       | Some x -> x
       | None ->
-          ( module struct
+          (module struct
             type t = St.Private.Sync.endpoint
 
             let decode _ = assert false
 
             let encode _ = assert false
-          end )
+          end)
 
     module Sy = Irmin.Sync (St)
     module Codec = Codec.Make (St)
@@ -134,11 +134,11 @@ functor
                 Results.tree_set results (Some (local tree));
                 Ok ())
 
-          method get_tree_impl params release_param_caps =
-            let open Tree.GetTree in
+          method find_tree_impl params release_param_caps =
+            let open Tree.FindTree in
             let key = Params.key_get params |> Codec.Key.decode in
             release_param_caps ();
-            Logs.info (fun f -> f "Tree.get_tree");
+            Logs.info (fun f -> f "Tree.find_tree");
             with_initialised_results
               (module Results)
               (fun results ->
@@ -222,6 +222,34 @@ functor
                 let* tree = St.Tree.remove tree (unwrap key) in
                 Results.tree_set results (Some (local tree));
                 Lwt.return @@ Ok ())
+
+          method list_keys_impl params release_param_caps =
+            let open Tree.ListKeys in
+            let key = Params.key_get params |> Codec.Key.decode in
+            release_param_caps ();
+            log_key_result (module St) "Tree.list_keys" key;
+            with_initialised_results
+              (module Results)
+              (fun results ->
+                let key = unwrap key in
+                let* tree = St.Tree.list tree key in
+                let l =
+                  List.map
+                    (fun (step, _) -> St.Key.rcons key step |> Codec.Key.encode)
+                    tree
+                in
+                Results.keys_set_list results l |> ignore;
+                Lwt.return @@ Ok ())
+
+          method check_impl _params release_param_caps =
+            let open Tree.Check in
+            release_param_caps ();
+            Logs.info (fun f -> f "Tree.check");
+            with_initialised_results
+              (module Results)
+              (fun results ->
+                Results.bool_set results true;
+                Lwt.return_ok ())
         end
         |> Tree.local
 
@@ -310,6 +338,16 @@ functor
                   >|= Results.value_set_builder results
                 in
                 Ok ())
+
+          method check_impl _params release_param_caps =
+            let open Commit.Check in
+            release_param_caps ();
+            Logs.info (fun f -> f "Commit.check");
+            with_initialised_results
+              (module Results)
+              (fun results ->
+                Results.bool_set results true;
+                Lwt.return_ok ())
         end
         |> Commit.local
     end
@@ -478,19 +516,22 @@ functor
                   x;
                 Ok ())
 
-          method get_tree_impl params release_param_caps =
-            let open Store.GetTree in
+          method find_tree_impl params release_param_caps =
+            let open Store.FindTree in
             let key = Params.key_get params |> Codec.Key.decode in
             release_param_caps ();
-            log_key_result (module St) "Store.get_tree" key;
+            log_key_result (module St) "Store.find_tree" key;
             with_initialised_results
               (module Results)
               (fun results ->
                 let+ () =
-                  St.get_tree store (unwrap key) >|= fun tree ->
-                  let x = Tree.local tree in
-                  let () = Results.tree_set results (Some x) in
-                  Capability.dec_ref x
+                  St.find_tree store (unwrap key) >|= fun tree ->
+                  Option.iter
+                    (fun tree ->
+                      let x = Tree.local tree in
+                      let () = Results.tree_set results (Some x) in
+                      Capability.dec_ref x)
+                    tree
                 in
                 Ok ())
 
@@ -597,7 +638,7 @@ functor
                 if Option.is_some Remote.v then (
                   let cap = Sync.local store in
                   Results.sync_set results (Some cap);
-                  Capability.dec_ref cap );
+                  Capability.dec_ref cap);
                 Lwt.return @@ Ok ())
 
           method pack_impl _params release_param_caps =
@@ -610,7 +651,7 @@ functor
                 if Option.is_some P.v then (
                   let cap = Pack.local (St.repo store) in
                   Results.pack_set results (Some cap);
-                  Capability.dec_ref cap );
+                  Capability.dec_ref cap);
                 Lwt.return @@ Ok ())
 
           method last_modified_impl params release_param_caps =

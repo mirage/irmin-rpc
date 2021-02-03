@@ -35,12 +35,6 @@ module type S = sig
   type hash
   (** Hash type, inherited from the underlying Irmin store *)
 
-  type sync
-  (** Sync handle, used for accessing `Irmin.Sync` functionality *)
-
-  type pack
-  (** Pack handle, user for accessing `Irmin_pack` functionality *)
-
   type step
   (** Key step, inherited from the underlying Irmin store *)
 
@@ -68,6 +62,9 @@ module type S = sig
 
     val find_hash : t -> key -> hash option Lwt.t
     (** Get the hash of the contents stored at [key], if the key exists *)
+
+    val find_tree : t -> key -> tree option Lwt.t
+    (** Find a tree from the Irmin store, if it exists *)
 
     val get_tree : t -> key -> tree Lwt.t
     (** Get a tree from the Irmin store *)
@@ -110,6 +107,8 @@ module type S = sig
 
   module Commit : sig
     type t = commit
+
+    val check : commit -> bool Lwt.t
 
     val of_hash : repo -> hash -> commit Lwt.t
     (** Get commit from specified hash *)
@@ -163,13 +162,20 @@ module type S = sig
   module Tree : sig
     type t = tree
 
+    type concrete = [ `Contents of hash | `Tree of (step * concrete) list ]
+
     val empty : repo -> tree Lwt.t
     (** Create an empty tree *)
+
+    val check : tree -> bool Lwt.t
 
     val find : tree -> key -> contents option Lwt.t
     (** Find value associated with key *)
 
-    val get_tree : tree -> key -> tree Lwt.t
+    val find_tree : tree -> key -> tree option Lwt.t
+    (** Get a subtree *)
+
+    val get_tree : t -> key -> tree Lwt.t
     (** Get a subtree *)
 
     val add : tree -> key -> contents -> tree Lwt.t
@@ -184,7 +190,7 @@ module type S = sig
     val mem_tree : tree -> key -> bool Lwt.t
     (** Check if a subtree exists at the given key *)
 
-    val concrete : tree -> (hash, step) Codec_intf.concrete_tree Lwt.t
+    val concrete : tree -> concrete Lwt.t
     (** Return a concrete representation of a tree *)
 
     val find_hash : tree -> key -> hash option Lwt.t

@@ -41,7 +41,7 @@ let check_failure (type a) (fn : unit -> a Lwt.t) : unit Lwt.t =
           match String.is_substring "Broken test capability" error_msg with
           | true -> Lwt.return_unit
           | false ->
-              Alcotest.failf "Unexpected Failure error message: %s" error_msg )
+              Alcotest.failf "Unexpected Failure error message: %s" error_msg)
       | exn -> Lwt.fail exn)
 
 let test_case name (fn : ctx -> unit Lwt.t) =

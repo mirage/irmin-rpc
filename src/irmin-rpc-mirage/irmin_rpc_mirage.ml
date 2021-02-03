@@ -41,8 +41,9 @@ struct
   end
 
   module Client = struct
-    include Irmin_rpc.Client.Make (Store) (Remote)
-              (Irmin_rpc.Config.Pack.None (Store))
+    include
+      Irmin_rpc.Client.Make (Store) (Remote)
+        (Irmin_rpc.Config.Pack.None (Store))
 
     let connect stack uri =
       let dns = Dns.create stack in

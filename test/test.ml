@@ -1,7 +1,6 @@
 open Lwt.Infix
 open Common
-
-(*open Irmin_rpc.Private.Utils*)
+open Irmin_rpc.Private.Utils
 module Server = Irmin_mem.KV (Irmin.Contents.String)
 module RPC =
   Irmin_rpc.Make
@@ -81,24 +80,40 @@ module Test_store = struct
             ("leaf", contents "data1"); ("branch", stree "f" (contents "data2"));
           ])
     in
+    let rec convert_tree (x : Client.Tree.concrete) =
+      match x with
+      | `Contents x ->
+          let+ c = Server.Contents.of_hash server x in
+          `Contents (Option.get c, ())
+      | `Tree l ->
+          let+ l =
+            Lwt_list.map_s
+              (fun (step, t) ->
+                let+ t = convert_tree t in
+                (step, t))
+              l
+          in
+          `Tree l
+    in
     let* () =
       let* master = server |> Server.master in
       tree
       |> Server.Tree.of_concrete
       |> Server.set_tree_exn master ~info [ "k" ]
     in
-    let* _master = client |> Store.master in
-    (*let* () =
-        Client.get_tree master [ "k" ]
-        >>= Client.Tree.exists
-        >|= Alcotest.(check bool) "Tree exists" true
-        (*>|= Alcotest.(check find_tree) "Binding [k → Some tree]" (Some tree)*)
-      in*)
-    (*let* () =
-        Client.find_tree master [ "k_absent" ]
-        >>= Option.map_lwt Server.Tree.to_concrete
-        >|= Alcotest.(check find_tree) "Binding [k_absent → Some tree]" None
-      in*)
+    let* master = client |> Store.master in
+    let* () =
+      Client.Store.find_tree master [ "k" ]
+      >>= Option.map_lwt Client.Tree.concrete
+      >>= Option.map_lwt convert_tree
+      >|= Alcotest.(check find_tree) "Binding [k → Some tree]" (Some tree)
+    in
+    let* () =
+      Client.Store.find_tree master [ "k_absent" ]
+      >>= Option.map_lwt Client.Tree.concrete
+      >>= Option.map_lwt convert_tree
+      >|= Alcotest.(check find_tree) "Binding [k_absent → Some tree]" None
+    in
     Lwt.return ()
 
   let test_set { server; client } =
