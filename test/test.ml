@@ -1,4 +1,5 @@
 open Lwt.Infix
+open Lwt.Syntax
 open Common
 open Irmin_rpc.Private.Utils
 module Server = Irmin_mem.KV (Irmin.Contents.String)
@@ -16,10 +17,6 @@ module Client = struct
   let of_branch = Fun.flip Store.of_branch
 end
 
-let ( let+ ) x f = Lwt.map f x
-
-let ( let* ) = Lwt.bind
-
 (** Default info. *)
 let info = Irmin.Info.none
 
@@ -34,6 +31,22 @@ module Test_store = struct
     let+ server = Server.Repo.v (Irmin_mem.config ()) in
     let client = RPC.Server.Repo.local server in
     { server; client }
+
+  let rec resolve_tree server (x : Client.Tree.concrete) =
+    match x with
+    | `Contents x ->
+        let+ c = Server.Contents.of_hash server x in
+        let c = Option.get c in
+        `Contents (c, Server.Metadata.default)
+    | `Tree l ->
+        let+ l =
+          Lwt_list.map_s
+            (fun (step, t) ->
+              let+ t = resolve_tree server t in
+              (step, t))
+            l
+        in
+        `Tree l
 
   let test_case name (fn : ctx -> unit Lwt.t) =
     Alcotest_lwt.test_case name `Quick (fun _switch () -> ctx () >>= fn)
@@ -80,22 +93,7 @@ module Test_store = struct
             ("leaf", contents "data1"); ("branch", stree "f" (contents "data2"));
           ])
     in
-    let rec convert_tree (x : Client.Tree.concrete) =
-      match x with
-      | `Contents x ->
-          let+ c = Server.Contents.of_hash server x in
-          let c = Option.get c in
-          `Contents (c, Server.Metadata.default)
-      | `Tree l ->
-          let+ l =
-            Lwt_list.map_s
-              (fun (step, t) ->
-                let+ t = convert_tree t in
-                (step, t))
-              l
-          in
-          `Tree l
-    in
+
     let* () =
       let* master = server |> Server.master in
       tree
@@ -106,13 +104,13 @@ module Test_store = struct
     let* () =
       Client.Store.find_tree master [ "k" ]
       >>= Option.map_lwt Client.Tree.concrete
-      >>= Option.map_lwt convert_tree
+      >>= Option.map_lwt (resolve_tree server)
       >|= Alcotest.(check find_tree) "Binding [k → Some tree]" (Some tree)
     in
     let* () =
       Client.Store.find_tree master [ "k_absent" ]
       >>= Option.map_lwt Client.Tree.concrete
-      >>= Option.map_lwt convert_tree
+      >>= Option.map_lwt (resolve_tree server)
       >|= Alcotest.(check find_tree) "Binding [k_absent → Some tree]" None
     in
     Lwt.return ()
@@ -135,6 +133,26 @@ module Test_store = struct
     in
     Lwt.return ()
 
+  let random_string n =
+    String.init n (fun _ -> char_of_int (31 + Random.int 95))
+
+  let test_tree { server; client } =
+    let info () = Faker.info () in
+    let* master = Client.Store.master client in
+    let* tree = Client.Tree.empty client in
+    let* tree = Client.Tree.add tree [ "a" ] (random_string 2048) in
+    let* tree = Client.Tree.add_tree tree [ "b" ] tree in
+    let* tree = Client.Tree.remove tree [ "b" ] in
+    let* () = Client.Store.set_tree master [ "tree" ] tree ~info in
+    let* tree = Client.Tree.concrete tree >>= resolve_tree server in
+    let* master = Server.master server in
+    let* () =
+      Server.find_tree master [ "tree" ]
+      >>= Option.map_lwt Server.Tree.to_concrete
+      >|= Alcotest.(check find_tree) "tree matches" (Some tree)
+    in
+    Lwt.return ()
+
   let suite =
     [
       test_case "master" test_master;
@@ -143,6 +161,7 @@ module Test_store = struct
       test_case "find" test_find;
       test_case "find_tree" test_find_tree;
       test_case "set" test_set;
+      test_case "tree" test_tree;
     ]
 end
 
