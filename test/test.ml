@@ -84,7 +84,8 @@ module Test_store = struct
       match x with
       | `Contents x ->
           let+ c = Server.Contents.of_hash server x in
-          `Contents (Option.get c, ())
+          let c = Option.get c in
+          `Contents (c, Server.Metadata.default)
       | `Tree l ->
           let+ l =
             Lwt_list.map_s

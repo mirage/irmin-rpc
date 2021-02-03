@@ -123,6 +123,7 @@ module Make (Store : Irmin.S) = struct
                   B.Tree.Node.step_set node (Key.Step.encode step);
                   let tt = B.Tree.Concrete.init_root () in
                   let+ () = inner tt (Store.Key.rcons key step) tree in
+                  B.Tree.Node.tree_set_builder node tt |> ignore;
                   node)
                 l
             in
