@@ -153,6 +153,32 @@ module Test_store = struct
     in
     Lwt.return ()
 
+  let test_test_and_set { server; client } =
+    let info () = Faker.info () in
+    let* master = Client.Store.master client in
+    let s = random_string 1024 in
+    let s' = random_string 1024 in
+    let* ok =
+      Client.Store.test_and_set master ~info [ "test"; "set" ] ~test:None
+        ~set:(Some s)
+    in
+    Alcotest.(check bool) "test and set, initial value" true ok;
+    let* ok =
+      Client.Store.test_and_set master ~info [ "test"; "set" ] ~test:None
+        ~set:(Some s')
+    in
+    Alcotest.(check bool) "test and set, incorrect value" false ok;
+    let* ok =
+      Client.Store.test_and_set master ~info [ "test"; "set" ] ~test:(Some s)
+        ~set:(Some s')
+    in
+    Alcotest.(check bool) "test and set, correct value" true ok;
+    let* master = Server.master server in
+    let* v = Server.find master [ "test"; "set" ] in
+    Alcotest.(check (option string))
+      "test and set, value from store" (Some s') v;
+    Lwt.return ()
+
   let suite =
     [
       test_case "master" test_master;
@@ -162,6 +188,7 @@ module Test_store = struct
       test_case "find_tree" test_find_tree;
       test_case "set" test_set;
       test_case "tree" test_tree;
+      test_case "test_and_set" test_test_and_set;
     ]
 end
 

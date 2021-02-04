@@ -72,8 +72,24 @@ module type S = sig
     val set : info:Irmin.Info.f -> t -> key -> contents -> unit Lwt.t
     (** Set a value at the specified key *)
 
+    val test_and_set :
+      info:Irmin.Info.f ->
+      t ->
+      key ->
+      test:contents option ->
+      set:contents option ->
+      bool Lwt.t
+
     val set_tree : info:Irmin.Info.f -> t -> key -> tree -> unit Lwt.t
     (** Set a tree at the specified key *)
+
+    val test_and_set_tree :
+      info:Irmin.Info.f ->
+      t ->
+      key ->
+      test:tree option ->
+      set:tree option ->
+      bool Lwt.t
 
     val remove : info:Info.f -> t -> key -> unit Lwt.t
     (** Remove the specified key *)

@@ -669,6 +669,54 @@ functor
                     Results.commit_set results (Some commit);
                     Capability.dec_ref commit;
                     Ok ())
+
+          method test_and_set_impl params release_param_caps =
+            let open Store.TestAndSet in
+            let key = Params.key_get params |> Codec.Key.decode in
+            let info = Params.info_get params
+            and test =
+              if Params.has_test params then Some (Params.test_get params)
+              else None
+            and set =
+              if Params.has_set params then Some (Params.set_get params)
+              else None
+            in
+            release_param_caps ();
+            log_key_result (module St) "Store.test_and_set" key;
+            Service.return_lwt (fun () ->
+                let info = info |> Codec.Info.decode
+                and test =
+                  Option.map (fun x -> Codec.Contents.decode x |> unwrap) test
+                and set =
+                  Option.map (fun x -> Codec.Contents.decode x |> unwrap) set
+                in
+                let+! () =
+                  St.test_and_set
+                    ~info:(fun () -> info)
+                    store (unwrap key) ~test ~set
+                  |> process_write_error
+                in
+                Service.Response.create_empty ())
+
+          method test_and_set_tree_impl params release_param_caps =
+            let open Store.TestAndSetTree in
+            let key = Params.key_get params |> Codec.Key.decode in
+            let info = Params.info_get params
+            and test = Params.test_get params
+            and set = Params.set_get params in
+            release_param_caps ();
+            log_key_result (module St) "Store.test_and_set_tree" key;
+            Service.return_lwt (fun () ->
+                let info = info |> Codec.Info.decode
+                and test = Option.map (fun x -> Tree.read x) test
+                and set = Option.map (fun x -> Tree.read x) set in
+                let+! () =
+                  St.test_and_set_tree
+                    ~info:(fun () -> info)
+                    store (unwrap key) ~test ~set
+                  |> process_write_error
+                in
+                Service.Response.create_empty ())
         end
         |> Store.local
     end

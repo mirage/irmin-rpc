@@ -342,6 +342,23 @@ functor
         let+ _ = Capability.call_for_value_exn t method_id req in
         ()
 
+      let test_and_set ~info t key ~test ~set =
+        let open Raw.Client.Store.TestAndSet in
+        log_key (module Store) "Store.test_and_set" key;
+        let req, p = Capability.Request.create Params.init_pointer in
+        Params.key_set p (Codec.Key.encode key);
+        let (_ : Raw.Builder.Info.t) =
+          info () |> Codec.Info.encode |> Params.info_set_builder p
+        in
+        Option.iter
+          (fun contents -> Codec.Contents.encode contents |> Params.test_set p)
+          test;
+        Option.iter
+          (fun contents -> Codec.Contents.encode contents |> Params.set_set p)
+          set;
+        let+ x = Capability.call_for_value t method_id req in
+        match x with Ok _ -> true | _ -> false
+
       let set_tree ~info t key tree =
         let open Raw.Client.Store.SetTree in
         log_key (module Store) "Store.set_tree" key;
@@ -353,6 +370,19 @@ functor
         in
         let+ _ = Capability.call_for_value_exn t method_id req in
         ()
+
+      let test_and_set_tree ~info t key ~test ~set =
+        let open Raw.Client.Store.TestAndSetTree in
+        log_key (module Store) "Store.test_and_set_tree" key;
+        let req, p = Capability.Request.create Params.init_pointer in
+        Params.key_set p (Codec.Key.encode key);
+        let (_ : Raw.Builder.Info.t) =
+          info () |> Codec.Info.encode |> Params.info_set_builder p
+        in
+        Params.test_set p test;
+        Params.set_set p set;
+        let+ x = Capability.call_for_value t method_id req in
+        match x with Ok _ -> true | _ -> false
 
       let remove ~info t key =
         let open Raw.Client.Store.Remove in

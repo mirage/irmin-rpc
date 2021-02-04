@@ -62,7 +62,7 @@ interface Tree {
   # Remove a value from the tree
   remove   @9  (key :Key) -> (tree :Tree);
 
-  listKeys @10 (key: Key) -> (keys :List(Key));
+  listKeys @10 (key :Key) -> (keys :List(Key));
 
   # Check if tree exists
   check       @11 () -> (bool :Bool);
@@ -172,6 +172,9 @@ interface Store {
 
   # Get a hash of the contents stored at `key`
   findHash @11 (key :Key) -> (hash :Hash);
+
+  testAndSet @12 (key :Key, test :Contents, set :Contents, info :Info) -> ();
+  testAndSetTree @13 (key :Key, test :Tree, set :Tree, info :Info) -> ();
 }
 
 interface Repo {
