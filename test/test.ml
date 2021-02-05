@@ -179,6 +179,34 @@ module Test_store = struct
       "test and set, value from store" (Some s') v;
     Lwt.return ()
 
+  let test_test_and_set_tree { server; client } =
+    let info () = Faker.info () in
+    let* master = Client.Store.master client in
+    let* tree = Client.Tree.empty client in
+    let* tree = Client.Tree.add tree [ "a" ] "1" in
+    let* tree = Client.Tree.add tree [ "b" ] "2" in
+    let* tree = Client.Tree.add tree [ "c" ] "3" in
+    let* ok =
+      Client.Store.test_and_set_tree master ~info [ "test"; "tree" ] ~test:None
+        ~set:(Some tree)
+    in
+    Alcotest.(check bool) "test and set tree, initial value" true ok;
+    let* ok =
+      Client.Store.test_and_set_tree master ~info [ "test"; "tree" ] ~test:None
+        ~set:None
+    in
+    Alcotest.(check bool) "test and set tree, incorrect value" false ok;
+    let* ok =
+      Client.Store.test_and_set_tree master ~info [ "test"; "tree" ]
+        ~test:(Some tree) ~set:None
+    in
+    Alcotest.(check bool) "test and set tree, correct value" true ok;
+    let* master = Server.master server in
+    let* v = Server.find master [ "test"; "tree" ] in
+    Alcotest.(check (option string))
+      "test and set tree, value from store" None v;
+    Lwt.return ()
+
   let suite =
     [
       test_case "master" test_master;
@@ -189,6 +217,7 @@ module Test_store = struct
       test_case "set" test_set;
       test_case "tree" test_tree;
       test_case "test_and_set" test_test_and_set;
+      test_case "test_and_set_tree" test_test_and_set_tree;
     ]
 end
 
