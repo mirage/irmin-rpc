@@ -72,14 +72,13 @@ module Make (Store : Irmin.S) = struct
     type t = [ `Contents of Store.hash | `Tree of (Store.step * t) list ]
 
     let rec of_irmin_tree (x : Store.tree) : t Lwt.t =
-      let* t = Store.Tree.to_concrete x in
-      match t with
-      | `Contents (c, _) -> Lwt.return @@ `Contents (Store.Contents.hash c)
-      | `Tree l ->
+      match Store.Tree.destruct x with
+      | `Contents (c, _) -> Lwt.return @@ `Contents (Store.Tree.Contents.hash c)
+      | `Node node ->
+          let* l = Store.Tree.list (Store.Tree.of_node node) Store.Key.empty in
           let+ x =
             Lwt_list.map_s
               (fun (step, tree) ->
-                let tree = Store.Tree.of_concrete tree in
                 let+ x = of_irmin_tree tree in
                 (step, x))
               l
@@ -90,20 +89,18 @@ module Make (Store : Irmin.S) = struct
       let rec inner repo t =
         match t with
         | `Contents hash ->
-            let+ contents = Store.Contents.of_hash repo hash in
-            `Contents (Option.get contents, Store.Metadata.default)
-        | `Tree l ->
-            let+ l =
-              Lwt_list.map_s
-                (fun (step, t) ->
-                  let+ t = inner repo t in
-                  (step, t))
-                l
+            let+ x =
+              Store.Tree.of_hash repo (`Contents (hash, Store.Metadata.default))
             in
-            `Tree l
+            Option.get x
+        | `Tree l ->
+            Lwt_list.fold_left_s
+              (fun acc (step, tree) ->
+                let* t = inner repo tree in
+                Store.Tree.add_tree acc (Store.Key.v [ step ]) t)
+              Store.Tree.empty l
       in
-      let+ x = inner repo t in
-      Store.Tree.of_concrete x
+      inner repo t
 
     let encode (tree : t) : Raw.Builder.Tree.Concrete.t Lwt.t =
       let rec inner tr key (tree : t) =
@@ -125,7 +122,7 @@ module Make (Store : Irmin.S) = struct
                   let+ () = inner tt (Store.Key.rcons key step) tree in
                   B.Tree.Node.tree_set_builder node tt |> ignore;
                   node)
-                l
+                (List.rev l)
             in
             let (_
                   : ( Irmin_api.rw,
