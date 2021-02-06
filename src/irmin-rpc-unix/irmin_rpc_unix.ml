@@ -1,36 +1,24 @@
 open Lwt.Infix
 
-module Git_unix_endpoint_codec = struct
-  type t = Git_unix.endpoint
+module Remote = struct
+  module Git = struct
+    type t = Mimic.ctx * Smart_git.Endpoint.t
 
-  let encode Git_unix.{ uri; headers } =
-    let open Sexplib0.Sexp_conv in
-    (Uri.to_string uri, headers)
-    |> sexp_of_pair sexp_of_string Cohttp.Header.sexp_of_t
-    |> Sexplib0.Sexp.to_string
+    let encode (_, endpoint) = Fmt.to_to_string Smart_git.Endpoint.pp endpoint
 
-  let decode str =
-    let open Sexplib0.Sexp_conv in
-    let uri_string, headers =
-      str
-      |> Sexplib.Sexp.of_string
-      |> pair_of_sexp string_of_sexp Cohttp.Header.t_of_sexp
-    in
-    Ok Git_unix.{ uri = Uri.of_string uri_string; headers }
+    let decode str =
+      Result.map (fun x -> (Mimic.empty, x)) @@ Smart_git.Endpoint.of_string str
+  end
 end
 
 module Make
     (Store : Irmin.S)
-    (Endpoint_codec : Irmin_rpc.Codec.SERIALISABLE
-                        with type t = Store.Private.Sync.endpoint) =
+    (Remote : Irmin_rpc.Config.REMOTE with type t = Store.Private.Sync.endpoint)
+    (Pack : Irmin_rpc.Config.PACK with type repo = Store.repo) =
 struct
-  module Info = struct
-    let info = Irmin_unix.info
-  end
-
-  module Rpc = Irmin_rpc.Make (Store) (Info) (Endpoint_codec)
-
   module Server = struct
+    module Api = Irmin_rpc.Server.Make (Store) (Remote) (Pack)
+
     type t = { uri : Uri.t }
 
     let uri { uri; _ } = uri
@@ -39,14 +27,18 @@ struct
       let config =
         Capnp_rpc_unix.Vat_config.create ?backlog ~secret_key ?serve_tls addr
       in
-      let service_id = Capnp_rpc_unix.Vat_config.derived_id config "main" in
-      let restore = Capnp_rpc_net.Restorer.single service_id (Rpc.local repo) in
+      let service_id =
+        match serve_tls with
+        | Some true | None -> Capnp_rpc_unix.Vat_config.derived_id config "main"
+        | Some false -> Capnp_rpc_net.Restorer.Id.public ""
+      in
+      let restore = Capnp_rpc_net.Restorer.single service_id (Api.local repo) in
       Capnp_rpc_unix.serve ?switch ~restore config >|= fun vat ->
       { uri = Capnp_rpc_unix.Vat.sturdy_uri vat service_id }
   end
 
   module Client = struct
-    include Irmin_rpc.Client.Make (Store) (Endpoint_codec)
+    include Irmin_rpc.Client.Make (Store) (Remote) (Pack)
 
     let connect uri =
       let client_vat = Capnp_rpc_unix.client_only_vat () in

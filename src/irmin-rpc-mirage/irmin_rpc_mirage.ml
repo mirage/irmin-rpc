@@ -2,48 +2,48 @@ open Lwt.Infix
 
 module Make
     (Store : Irmin.S)
-    (Endpoint_codec : Irmin_rpc.Codec.SERIALISABLE
-                        with type t = Store.Private.Sync.endpoint)
+    (Remote : Irmin_rpc.Config.REMOTE with type t = Store.Private.Sync.endpoint)
     (Random : Mirage_random.S)
     (Mclock : Mirage_clock.MCLOCK)
     (Pclock : Mirage_clock.PCLOCK)
     (Time : Mirage_time.S)
     (Stack : Mirage_stack.V4) =
 struct
-  module Capnp_rpc_mirage = Capnp_rpc_mirage.Make (Random) (Mclock) (Stack)
+  module Capnp_rpc_mirage =
+    Capnp_rpc_mirage.Make (Random) (Time) (Mclock) (Stack)
   module Dns = Capnp_rpc_mirage.Network.Dns
 
   module Server = struct
-    module Info = struct
-      module Info = Irmin_mirage.Info (Pclock)
+    module Rpc =
+      Irmin_rpc.Make (Store) (Remote) (Irmin_rpc.Config.Pack.None (Store))
 
-      let info ?(author = "irmin-rpc") = Info.f ~author
-    end
-
-    module Rpc = Irmin_rpc.Make (Store) (Info) (Endpoint_codec)
-
-    type t = { uri : Uri.t }
-
-    let uri { uri; _ } = uri
-
-    let create ~secret_key ?serve_tls ?(port = 1111) stack ~addr repo =
+    let serve ~secret_key ?switch ?serve_tls ?(port = 1111) stack ~addr repo =
       let dns = Dns.create stack in
       let net = Capnp_rpc_mirage.network ~dns stack in
       let public_address = `TCP (addr, port) in
       let config =
-        Capnp_rpc_mirage.Vat_config.create ~secret_key ?serve_tls
-          ~public_address (`TCP port)
+        Capnp_rpc_mirage.Vat_config.create ~public_address ~secret_key
+          ?serve_tls (`TCP port)
       in
-      let service_id = Capnp_rpc_mirage.Vat_config.derived_id config "main" in
-      let restore = Capnp_rpc_net.Restorer.single service_id (Rpc.local repo) in
-      Capnp_rpc_mirage.serve net config ~restore >|= fun vat ->
-      { uri = Capnp_rpc_mirage.Vat.sturdy_uri vat service_id }
+      let service_id =
+        match serve_tls with
+        | Some true | None ->
+            Capnp_rpc_mirage.Vat_config.derived_id config "main"
+        | Some false -> Capnp_rpc_net.Restorer.Id.public ""
+      in
+      let restore =
+        Capnp_rpc_net.Restorer.single service_id (Rpc.Server.local repo)
+      in
+      Capnp_rpc_mirage.serve ?switch net config ~restore >|= fun vat ->
+      Capnp_rpc_mirage.Vat.sturdy_uri vat service_id
 
-    let run _t = fst @@ Lwt.wait ()
+    include Rpc.Server
   end
 
   module Client = struct
-    include Irmin_rpc.Client.Make (Store) (Endpoint_codec)
+    include
+      Irmin_rpc.Client.Make (Store) (Remote)
+        (Irmin_rpc.Config.Pack.None (Store))
 
     let connect stack uri =
       let dns = Dns.create stack in

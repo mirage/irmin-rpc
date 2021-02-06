@@ -1,29 +1,39 @@
 opam-version: "2.0"
+synopsis: "Cap'n Proto RPC client/server for Irmin"
 maintainer: "Zach Shipko <zachshipko@gmail.com>"
-authors: ["Zach Shipko <zachshipko@gmail.com>"]
+authors: "Zach Shipko <zachshipko@gmail.com>"
 license: "ISC"
 homepage: "https://github.com/mirage/irmin-rpc"
 doc: "https://mirage.github.io/irmin-rpc/doc"
-dev-repo: "git://github.com:mirage/irmin-rpc"
 bug-reports: "https://github.com/mirage/irmin-rpc/issues"
-
+depends: [
+  "ocaml" {>= "4.08.0"}
+  "dune" {>= "2.0.0"}
+  "irmin-rpc"
+  "irmin-mirage" {>= "dev"}
+  "mirage-time" {>= "2.0.0"}
+  "mirage-stack" {>= "2.0.0"}
+  "dns-client"
+  "capnp-rpc-mirage" {>= "0.9.0"}
+  "git-mirage"
+  "capnp-rpc-lwt" {>= "0.9.0"}
+  "capnp-rpc-net" {>= "0.9.0"}
+  "irmin" {>= "dev"}
+  "lwt" {>= "4.0.0"}
+  "mirage-clock" {>= "3.0.0"}
+  "mirage-random" {>= "2.0.0"}
+  "uri" {>= "4.0.0"}
+]
 build: [
   ["dune" "subst"] {pinned}
   ["dune" "build" "-p" name "-j" jobs]
   ["dune" "runtest" "-p" name] {with-test}
 ]
+dev-repo: "git+ssh://github.com/mirage/irmin-rpc"
 
-depends:
-[
-  "ocaml" {>= "4.08.0"}
-  "dune" {>= "2.0.0"}
-  "irmin-rpc"
-  "irmin-mirage"
-  "mirage-time" {>= "2.0.0"}
-  "mirage-stack" {>= "2.0.0"}
-  "dns-client"
-  "capnp-rpc-mirage" {>= "0.6.0"}
-  "git-mirage"
+
+pin-depends: [
+  ["ppx_irmin.dev" "git+https://github.com/mirage/irmin#806315563437cb8d77e32f75daee1408f32b2bda"]
+  ["irmin.dev" "git+https://github.com/mirage/irmin#806315563437cb8d77e32f75daee1408f32b2bda"]
+  ["irmin-mirage.dev" "git+https://github.com/mirage/irmin#806315563437cb8d77e32f75daee1408f32b2bda"]
 ]
-
-synopsis: "Cap'n Proto RPC client/server for Irmin"

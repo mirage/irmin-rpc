@@ -1,35 +1,43 @@
 module Make
     (Store : Irmin.S)
-    (Endpoint_codec : Irmin_rpc.Codec.SERIALISABLE
-                        with type t = Store.Private.Sync.endpoint)
+    (Remote : Irmin_rpc.Config.REMOTE with type t = Store.Private.Sync.endpoint)
     (Random : Mirage_random.S)
     (Mclock : Mirage_clock.MCLOCK)
     (Pclock : Mirage_clock.PCLOCK)
     (Time : Mirage_time.S)
     (Stack : Mirage_stack.V4) : sig
-  module Dns : module type of Dns_client_mirage.Make (Random) (Mclock) (Stack)
+  module Dns :
+      module type of Dns_client_mirage.Make (Random) (Time) (Mclock) (Stack)
 
   module Server : sig
-    module Rpc : Irmin_rpc.S with module Store = Store
+    include
+      Irmin_rpc.Server.S
+        with type repo = Store.repo
+         and type store = Store.t
+         and type commit = Store.commit
+         and type hash = Store.hash
 
-    type t
-
-    val uri : t -> Uri.t
-
-    val create :
+    val serve :
       secret_key:[< `PEM of string | `Ephemeral ] ->
+      ?switch:Lwt_switch.t ->
       ?serve_tls:bool ->
       ?port:int ->
       Stack.t ->
       addr:string ->
-      Store.repo ->
-      t Lwt.t
-
-    val run : t -> 'a Lwt.t
+      repo ->
+      Uri.t Lwt.t
   end
 
   module Client : sig
-    include Irmin_rpc.Client.S with module Store = Store
+    include
+      Irmin_rpc.Client.S
+        with type branch = Store.branch
+         and type key = Store.key
+         and type step = Store.Key.step
+         and type contents = Store.contents
+         and type hash = Store.hash
+         and module Key = Store.Key
+         and module Hash = Store.Hash
 
     val connect : Stack.t -> Uri.t -> t Lwt.t
   end

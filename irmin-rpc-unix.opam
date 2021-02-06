@@ -1,20 +1,12 @@
 opam-version: "2.0"
+synopsis: "Cap'n Proto RPC client/server for Irmin"
 maintainer: "Zach Shipko <zachshipko@gmail.com>"
-authors: ["Zach Shipko <zachshipko@gmail.com>"]
+authors: "Zach Shipko <zachshipko@gmail.com>"
 license: "ISC"
 homepage: "https://github.com/mirage/irmin-rpc"
 doc: "https://mirage.github.io/irmin-rpc/doc"
-dev-repo: "git://github.com:mirage/irmin-rpc"
 bug-reports: "https://github.com/mirage/irmin-rpc/issues"
-
-build: [
-  ["dune" "subst"] {pinned}
-  ["dune" "build" "-p" name "-j" jobs]
-  ["dune" "runtest" "-p" name] {with-test}
-]
-
-depends:
-[
+depends: [
   "ocaml" {>= "4.08.0"}
   "dune" {>= "2.0.0"}
   "capnp-rpc"
@@ -23,11 +15,60 @@ depends:
   "capnp-rpc-net"
   "irmin"
   "irmin-rpc"
-  "irmin-unix"
+  "irmin-unix" {>= "dev"}
   "lwt"
   "sexplib0"
   "uri"
-  "alcotest-lwt" {with-test & >= "1.1.0"}
+  "alcotest-lwt" {with-test & >= "1.0.0"}
+  "checkseum" {>= "0.3.0"}
+  "cmdliner" {>= "1.0.4"}
+  "cohttp" {>= "2.0.0"}
+  "digestif" {>= "0.9.0"}
+  "git" {>= "3.0.0"}
+  "git-unix" {>= "3.0.0"}
+  "irmin-git" {>= "dev"}
 ]
-
-synopsis: "Cap'n Proto RPC client/server for Irmin"
+build: [
+  ["dune" "subst"] {pinned}
+  ["dune" "build" "-p" name "-j" jobs]
+  ["dune" "runtest" "-p" name] {with-test}
+]
+dev-repo: "git+ssh://github.com/mirage/irmin-rpc"
+pin-depends: [
+  [
+    "ppx_irmin.dev"
+    "git+https://github.com/mirage/irmin#806315563437cb8d77e32f75daee1408f32b2bda"
+  ]
+  [
+    "irmin.dev"
+    "git+https://github.com/mirage/irmin#806315563437cb8d77e32f75daee1408f32b2bda"
+  ]
+  [
+    "irmin-git.dev"
+    "git+https://github.com/mirage/irmin#806315563437cb8d77e32f75daee1408f32b2bda"
+  ]
+  [
+    "irmin-fs.dev"
+    "git+https://github.com/mirage/irmin#806315563437cb8d77e32f75daee1408f32b2bda"
+  ]
+  [
+    "irmin-graphql.dev"
+    "git+https://github.com/mirage/irmin#806315563437cb8d77e32f75daee1408f32b2bda"
+  ]
+  [
+    "irmin-http.dev"
+    "git+https://github.com/mirage/irmin#806315563437cb8d77e32f75daee1408f32b2bda"
+  ]
+  [
+    "irmin-layers.dev"
+    "git+https://github.com/mirage/irmin#806315563437cb8d77e32f75daee1408f32b2bda"
+  ]
+  [
+    "irmin-pack.dev"
+    "git+https://github.com/mirage/irmin#806315563437cb8d77e32f75daee1408f32b2bda"
+  ]
+  [
+    "irmin-unix.dev"
+    "git+https://github.com/mirage/irmin#806315563437cb8d77e32f75daee1408f32b2bda"
+  ]
+]

@@ -2,4 +2,4 @@
  (name irmin_rpc_unix)
  (public_name irmin-rpc-unix)
  (libraries capnp-rpc capnp-rpc-lwt capnp-rpc-net capnp-rpc-unix irmin
-   irmin-rpc irmin-unix lwt uri))
+   irmin-rpc irmin-unix lwt uri git-unix sexplib0 cohttp))

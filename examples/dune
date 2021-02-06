@@ -1,7 +1,9 @@
 (executables
- (names client server)
- (libraries checkseum.c digestif.c irmin-rpc-unix))
+ (names client server tree)
+ (libraries checkseum.c digestif.c irmin-unix irmin-rpc-unix lwt lwt.unix uri
+   capnp-rpc-unix))
 
 (alias
  (name runtest)
+ (package irmin-rpc-unix)
  (deps client.exe server.exe))

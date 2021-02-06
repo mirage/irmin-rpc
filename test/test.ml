@@ -1,152 +1,231 @@
-(*---------------------------------------------------------------------------
-  Copyright (c) 2018 Zach Shipko. All rights reserved. Distributed under the
-  ISC license, see terms at the end of the file. %%NAME%% %%VERSION%%
-  ---------------------------------------------------------------------------*)
-
 open Lwt.Infix
-module Store = Irmin_unix.Git.Mem.KV (Irmin.Contents.String)
-module Rpc =
-  Irmin_rpc_unix.Make (Store) (Irmin_rpc_unix.Git_unix_endpoint_codec)
+open Lwt.Syntax
+open Common
+open Irmin_rpc.Private.Utils
+module Server = Irmin_mem.KV (Irmin.Contents.String)
+module RPC =
+  Irmin_rpc.Make
+    (Server)
+    (Irmin_rpc.Config.Remote.None (Server))
+    (Irmin_rpc.Config.Pack.None (Server))
 
-let _ = Logs.set_reporter (Logs.format_reporter ())
+(** API changes to ease test-writing. Might want to upstream these at some
+    point. *)
+module Client = struct
+  include RPC.Client
 
-let _ = Unix.system "rm -rf ./db"
+  let of_branch = Fun.flip Store.of_branch
+end
 
-let cfg = Irmin_git.config "db"
+(** Default info. *)
+let info = Irmin.Info.none
 
-let hash_s = Irmin.Type.to_string Store.Hash.t
+open Client
 
-let commit = ref None
+module Test_store = struct
+  type ctx = { client : Client.repo; server : Server.repo }
+  (** Each test gets its own client/server pair over a fresh in-memory Irmin
+      store. *)
 
-let author, message = ("rpc-client-author", "rpc-client-message")
+  let ctx () =
+    let+ server = Server.Repo.v (Irmin_mem.config ()) in
+    let client = RPC.Server.Repo.local server in
+    { server; client }
 
-let test_snapshot_no_head t _switch () =
-  Lwt.catch
-    (fun () ->
-      Rpc.Client.snapshot t >|= fun _ -> Alcotest.fail "Expected exception")
-    (fun _ -> Lwt.return_unit)
+  let rec resolve_tree server (x : Client.Tree.concrete) =
+    match x with
+    | `Contents x ->
+        let+ c = Server.Contents.of_hash server x in
+        let c = Option.get c in
+        `Contents (c, Server.Metadata.default)
+    | `Tree l ->
+        let+ l =
+          Lwt_list.map_s
+            (fun (step, t) ->
+              let+ t = resolve_tree server t in
+              (step, t))
+            l
+        in
+        `Tree l
 
-let test_set t _switch () =
-  Rpc.Client.set t [ "a"; "b"; "c" ] "123" ~message:"abc=>123" ~author:"test"
-  >>= fun _ ->
-  Rpc.Client.find t [ "a"; "b"; "c" ] >|= function
-  | Some res -> Alcotest.(check string) "get a/b/c" res "123"
-  | _ -> Alcotest.fail "a/b/c not set when it is expected to be set"
+  let test_case name (fn : ctx -> unit Lwt.t) =
+    Alcotest_lwt.test_case name `Quick (fun _switch () -> ctx () >>= fn)
 
-let test_find_not_found t _switch () =
-  Rpc.Client.find t [ "abc" ] >>= function
-  | None -> Lwt.return_unit
-  | _ -> Alcotest.fail "abc set when it is expected to be unset"
+  (** Tests *)
 
-let test_remove t _switch () =
-  Rpc.Client.snapshot t >>= fun snapshot ->
-  commit := snapshot;
-  match snapshot with
-  | Some snapshot ->
-      Rpc.Client.remove ~author ~message t [ "abc" ] >>= fun hash ->
-      Alcotest.(check string)
-        "Check snapshot hash" (hash_s hash) (hash_s snapshot);
-      Rpc.Client.remove ~author ~message t [ "a"; "b"; "c" ] >>= fun hash ->
-      Alcotest.(check (neg string))
-        "Check snapshot hash after modification" (hash_s hash) (hash_s snapshot);
-      Lwt.return_unit
-  | None -> Alcotest.fail "Expected commit"
+  let test_master { client; _ } =
+    let+ (_ : Store.t) = client |> Store.master in
+    ()
 
-let test_revert t _switch () =
-  match !commit with
-  | Some commit ->
-      Rpc.Client.revert t commit >>= fun b ->
-      Alcotest.(check bool) "revert" b true;
-      Rpc.Client.get t [ "a"; "b"; "c" ] >|= fun res ->
-      Alcotest.(check string) "revert value" res "123"
-  | None -> Alcotest.fail "Revert commit hash is not defined"
+  let test_of_branch { client; _ } =
+    let+ (_ : Store.t) = client |> Client.of_branch "foo" in
+    ()
 
-let test_set_tree t _switch () =
-  let tree = Store.Tree.empty in
-  Store.Tree.add tree [ "foo"; "a" ] "1" >>= fun tree ->
-  Store.Tree.add tree [ "foo"; "b" ] "2" >>= fun tree ->
-  Store.Tree.add tree [ "foot"; "c" ] "3" >>= fun tree ->
-  Rpc.Client.Tree.set t ~author:"Testing" ~message:"Hello" [] tree
-  >>= fun hash ->
-  Rpc.Client.Tree.get t [ "foo" ] >>= fun tree' ->
-  Store.Tree.get_tree tree [ "foo" ] >>= fun tree ->
-  Store.Tree.diff tree tree' >>= fun diff ->
-  Alcotest.(check int) "tree diff" 0 (List.length diff);
-  Rpc.Client.Commit.info t hash >|= function
-  | Some info ->
-      Alcotest.(check string) "info author" "Testing" (Irmin.Info.author info);
-      Alcotest.(check string) "info message" "\nHello" (Irmin.Info.message info)
-  | None -> Alcotest.fail "Expected commit info"
+  let test_get { server; client } =
+    let* () =
+      let* master = server |> Server.master in
+      Server.set_exn master ~info [ "k" ] "v"
+    in
+    let* master = client |> Store.master in
+    Store.get master [ "k" ] >|= Alcotest.(check string) "Binding [k → v]" "v"
 
-(* TODO: look into why this fails when run with [opam install --build-test] but
-   not [dune runtest] *)
-let test_pull t _switch () =
-  Uri.of_string "git://github.com/mirage/irmin-rpc.git"
-  |> Git_unix.endpoint
-  |> Rpc.Client.Sync.pull t ~author ~message
-  >>= function
-  | Ok _hash ->
-      Rpc.Client.get t [ "README.md" ] >|= fun readme ->
-      let f = open_in "../../../README.md" in
-      let n = in_channel_length f in
-      let readme' = really_input_string f n in
-      close_in f;
-      Alcotest.(check string) "readme" readme readme'
-  | Error (`Msg e) -> Alcotest.fail e
+  let test_find { server; client } =
+    let* () =
+      let* master = server |> Server.master in
+      Server.set_exn master ~info [ "k" ] "v"
+    in
+    let* master = client |> Store.master in
+    let* () =
+      Store.find master [ "k" ]
+      >|= Alcotest.(check find) "Binding [k → Some v]" (Ok (Some "v"))
+    in
+    let* () =
+      Store.find master [ "k_absent" ]
+      >|= Alcotest.(check find) "Binding [k_absent → None]" (Ok None)
+    in
+    Lwt.return ()
 
-let test_merge t _switch () =
-  Rpc.Client.merge t ~author ~message ~branch:"testing" "master" >>= fun _ ->
-  Rpc.Client.set t ~author ~message ~branch:"testing" [ "README.md" ] "merged!"
-  >>= fun _ ->
-  Rpc.Client.merge t ~author ~message "testing" >>= function
-  | Ok _hash ->
-      Rpc.Client.get t [ "README.md" ] >|= fun readme ->
-      Alcotest.(check string) "readme - merge" readme "merged!"
-  | Error (`Msg msg) -> Alcotest.fail msg
+  let test_find_tree { server; client } =
+    let tree =
+      strees [ "a"; "b"; "c" ]
+        (`Tree
+          [
+            ("leaf", contents "data1"); ("branch", stree "f" (contents "data2"));
+          ])
+    in
 
-let test_create_remove_branch t _switch () =
-  Rpc.Client.snapshot t >>= fun head ->
-  match head with
-  | Some head ->
-      Rpc.Client.Branch.create t "aaa" head >>= fun _ ->
-      Rpc.Client.Branch.list t >|= fun l ->
-      let l = List.mem "aaa" l in
-      Alcotest.(check bool) "branches contains 'aaa'" l true
-  | None -> Alcotest.fail "No head commit found"
+    let* () =
+      let* master = server |> Server.master in
+      tree
+      |> Server.Tree.of_concrete
+      |> Server.set_tree_exn master ~info [ "k" ]
+    in
+    let* master = client |> Store.master in
+    let* () =
+      Client.Store.find_tree master [ "k" ]
+      >>= Option.map_lwt Client.Tree.concrete
+      >>= Option.map_lwt (resolve_tree server)
+      >|= Alcotest.(check find_tree) "Binding [k → Some tree]" (Some tree)
+    in
+    let* () =
+      Client.Store.find_tree master [ "k_absent" ]
+      >>= Option.map_lwt Client.Tree.concrete
+      >>= Option.map_lwt (resolve_tree server)
+      >|= Alcotest.(check find_tree) "Binding [k_absent → Some tree]" None
+    in
+    Lwt.return ()
 
-let local t =
-  [
-    Alcotest_lwt.test_case "snapshot (no head)" `Quick
-    @@ test_snapshot_no_head t;
-    Alcotest_lwt.test_case "set" `Quick @@ test_set t;
-    Alcotest_lwt.test_case "get" `Quick @@ test_find_not_found t;
-    Alcotest_lwt.test_case "del" `Quick @@ test_remove t;
-    Alcotest_lwt.test_case "revert" `Quick @@ test_revert t;
-    Alcotest_lwt.test_case "get_tree/set_tree" `Quick @@ test_set_tree t;
-    Alcotest_lwt.test_case "pull" `Quick @@ test_pull t;
-    Alcotest_lwt.test_case "merge" `Quick @@ test_merge t;
-    Alcotest_lwt.test_case "create/remove branch" `Quick
-    @@ test_create_remove_branch t;
-  ]
+  let test_set { server; client } =
+    let info = Faker.info () in
+    let* () =
+      let* master = client |> Store.master in
+      Store.set ~info:(fun () -> info) master [ "k" ] "v"
+    in
+    let* master = server |> Server.master in
+    let* () =
+      Server.get master [ "k" ]
+      >|= Alcotest.(check string) "Binding [k → v]" "v"
+    in
+    let* () =
+      Server.Head.get master
+      >|= Server.Commit.info
+      >|= Alcotest.(check info) "New commit has the correct info" info
+    in
+    Lwt.return ()
 
-let main =
-  Store.Repo.v cfg >>= fun repo ->
-  Alcotest_lwt.run "RPC" [ ("Local", local (Rpc.Rpc.local repo)) ]
+  let random_string n =
+    String.init n (fun _ -> char_of_int (31 + Random.int 95))
 
-let () = Lwt_main.run main
+  let test_tree { server; client } =
+    let info () = Faker.info () in
+    let* master = Client.Store.master client in
+    let* tree = Client.Tree.empty client in
+    let* tree = Client.Tree.add tree [ "a" ] (random_string 2048) in
+    let* tree = Client.Tree.add_tree tree [ "b" ] tree in
+    let* tree = Client.Tree.remove tree [ "b" ] in
+    let* () = Client.Store.set_tree master [ "tree" ] tree ~info in
+    let* tree = Client.Tree.concrete tree >>= resolve_tree server in
+    let* master = Server.master server in
+    let* () =
+      Server.find_tree master [ "tree" ]
+      >>= Option.map_lwt Server.Tree.to_concrete
+      >|= Alcotest.(check find_tree) "tree matches" (Some tree)
+    in
+    Lwt.return ()
 
-(*---------------------------------------------------------------------------
-  Copyright (c) 2018 Zach Shipko
+  let test_test_and_set { server; client } =
+    let info () = Faker.info () in
+    let* master = Client.Store.master client in
+    let s = random_string 1024 in
+    let s' = random_string 1024 in
+    let* ok =
+      Client.Store.test_and_set master ~info [ "test"; "set" ] ~test:None
+        ~set:(Some s)
+    in
+    Alcotest.(check bool) "test and set, initial value" true ok;
+    let* ok =
+      Client.Store.test_and_set master ~info [ "test"; "set" ] ~test:None
+        ~set:(Some s')
+    in
+    Alcotest.(check bool) "test and set, incorrect value" false ok;
+    let* ok =
+      Client.Store.test_and_set master ~info [ "test"; "set" ] ~test:(Some s)
+        ~set:(Some s')
+    in
+    Alcotest.(check bool) "test and set, correct value" true ok;
+    let* master = Server.master server in
+    let* v = Server.find master [ "test"; "set" ] in
+    Alcotest.(check (option string))
+      "test and set, value from store" (Some s') v;
+    Lwt.return ()
 
-  Permission to use, copy, modify, and/or distribute this software for any
-  purpose with or without fee is hereby granted, provided that the above
-  copyright notice and this permission notice appear in all copies.
+  let test_test_and_set_tree { server; client } =
+    let info () = Faker.info () in
+    let* master = Client.Store.master client in
+    let* tree = Client.Tree.empty client in
+    let* tree = Client.Tree.add tree [ "a" ] "1" in
+    let* tree = Client.Tree.add tree [ "b" ] "2" in
+    let* tree = Client.Tree.add tree [ "c" ] "3" in
+    let* ok =
+      Client.Store.test_and_set_tree master ~info [ "test"; "tree" ] ~test:None
+        ~set:(Some tree)
+    in
+    Alcotest.(check bool) "test and set tree, initial value" true ok;
+    let* ok =
+      Client.Store.test_and_set_tree master ~info [ "test"; "tree" ] ~test:None
+        ~set:None
+    in
+    Alcotest.(check bool) "test and set tree, incorrect value" false ok;
+    let* ok =
+      Client.Store.test_and_set_tree master ~info [ "test"; "tree" ]
+        ~test:(Some tree) ~set:None
+    in
+    Alcotest.(check bool) "test and set tree, correct value" true ok;
+    let* master = Server.master server in
+    let* v = Server.find master [ "test"; "tree" ] in
+    Alcotest.(check (option string))
+      "test and set tree, value from store" None v;
+    Lwt.return ()
 
-  THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH
-  REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY
-  AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,
-  INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
-  LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR
-  OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
-  PERFORMANCE OF THIS SOFTWARE.
-  ---------------------------------------------------------------------------*)
+  let suite =
+    [
+      test_case "master" test_master;
+      test_case "of_branch" test_of_branch;
+      test_case "get" test_get;
+      test_case "find" test_find;
+      test_case "find_tree" test_find_tree;
+      test_case "set" test_set;
+      test_case "tree" test_tree;
+      test_case "test_and_set" test_test_and_set;
+      test_case "test_and_set_tree" test_test_and_set_tree;
+    ]
+end
+
+let () =
+  Alcotest_lwt.run "irmin-rpc"
+    [
+      ("utils", Test_utils.suite);
+      ("store", Test_store.suite);
+      ("disconnected", Test_disconnected.suite);
+    ]
+  |> Lwt_main.run

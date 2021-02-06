@@ -1,0 +1,28 @@
+val ( >> ) : ('a -> 'b) -> ('b -> 'c) -> 'a -> 'c
+(** Left-to-right function composition. *)
+
+module Option : sig
+  include module type of Option
+
+  val iter_lwt : ('a -> unit Lwt.t) -> 'a option -> unit Lwt.t
+
+  val map_lwt : ('a -> 'b Lwt.t) -> 'a option -> 'b option Lwt.t
+end
+
+module String : sig
+  include module type of String
+
+  val to_list : string -> char list
+  (** Convert a string to a list of characters. *)
+
+  val is_substring : string -> string -> bool
+  (** [is_substring "bar" "foo bar baz"] is [true]. *)
+end
+
+val log_key : (module Irmin.S with type key = 'a) -> string -> 'a -> unit
+
+val log_key_result :
+  (module Irmin.S with type key = 'a) ->
+  string ->
+  ('a, [ `Msg of string ]) result ->
+  unit

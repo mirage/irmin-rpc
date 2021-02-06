@@ -1,32 +1,30 @@
-open Lwt.Infix
 open Cmdliner
+open Lwt.Infix
+
+let () =
+  Logs.set_level (Some Logs.Info);
+  Logs.set_reporter (Logs_fmt.reporter ())
 
 let config path =
-  let head = Git.Reference.of_string "refs/heads/master" in
+  print_endline path;
+  let head = Git.Reference.of_string "refs/heads/master" |> Result.get_ok in
   Irmin_git.config ~head path
 
-let run host port (Irmin_unix.Resolver.S ((module Store), store, _)) secret_key
-    address_file =
+let run (Irmin_unix.Resolver.S ((module Store), store, _)) host port secret_key
+    address_file insecure =
   let module Rpc =
     Irmin_rpc_unix.Make
       (Store)
-      (struct
-        type t = Store.Private.Sync.endpoint
-        (** TODO. [Irmin_unix.Resolver.S] is insufficient context for
-            serialising endpoints of the corresponding store, so we can't use
-            the SYNC API with stores constructed in this manner. *)
-
-        let fail _ = failwith "SYNC API unimplemented for CLI RPC"
-
-        let encode, decode = (fail, fail)
-      end)
+      (Irmin_rpc.Config.Remote.None (Store))
+      (Irmin_rpc.Config.Pack.None (Store))
   in
   let secret_key =
     match secret_key with Some key -> `File key | None -> `Ephemeral
   in
+  let secure = not insecure in
   let p =
     store >>= fun store ->
-    Rpc.Server.serve ~secret_key (`TCP (host, port)) (Store.repo store)
+    Rpc.Server.serve ~secure ~secret_key (`TCP (host, port)) (Store.repo store)
     >>= fun server ->
     let () =
       match address_file with
@@ -51,19 +49,6 @@ let port =
   let doc = "Port to listen on" in
   Arg.(value & opt int 9998 & info [ "p"; "port" ] ~docv:"PORT" ~doc)
 
-let contents =
-  let doc = "Content type" in
-  Arg.(
-    value & opt string "string" & info [ "c"; "contents" ] ~docv:"CONTENTS" ~doc)
-
-let store =
-  let doc = "Store type" in
-  Arg.(value & opt string "git" & info [ "s"; "store" ] ~docv:"STORE" ~doc)
-
-let root =
-  let doc = "Store location" in
-  Arg.(value & opt string "/tmp/irmin" & info [ "root" ] ~docv:"PATH" ~doc)
-
 let secret_key =
   let doc = "Secret key" in
   Arg.(
@@ -78,13 +63,18 @@ let address_file =
     & opt (some string) None
     & info [ "f"; "address-file" ] ~docv:"FILENAME" ~doc)
 
+let insecure =
+  let doc = "Disable SSL and other security features" in
+  Arg.(value & flag & info [ "insecure" ] ~doc)
+
 let main_t =
   Term.(
     const run
+    $ Irmin_unix.Resolver.store
     $ host
     $ port
-    $ Irmin_unix.Resolver.store
     $ secret_key
-    $ address_file)
+    $ address_file
+    $ insecure)
 
 let () = Term.exit @@ Term.eval (main_t, Term.info "irmin-rpc")
