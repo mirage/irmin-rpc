@@ -15,7 +15,7 @@ depends: [
   "capnp-rpc-net"
   "irmin"
   "irmin-rpc"
-  "irmin-unix"
+  "irmin-unix" {>= "dev"}
   "lwt"
   "sexplib0"
   "uri"
@@ -26,8 +26,7 @@ depends: [
   "digestif" {>= "0.9.0"}
   "git" {>= "3.0.0"}
   "git-unix" {>= "3.0.0"}
-  "irmin-git" {>= "2.3.0"}
-  "irmin-mem" {>= "2.3.0" & with-test}
+  "irmin-git" {>= "dev"}
 ]
 build: [
   ["dune" "subst"] {pinned}
@@ -35,3 +34,41 @@ build: [
   ["dune" "runtest" "-p" name] {with-test}
 ]
 dev-repo: "git+ssh://github.com/mirage/irmin-rpc"
+pin-depends: [
+  [
+    "ppx_irmin.dev"
+    "git+https://github.com/mirage/irmin#806315563437cb8d77e32f75daee1408f32b2bda"
+  ]
+  [
+    "irmin.dev"
+    "git+https://github.com/mirage/irmin#806315563437cb8d77e32f75daee1408f32b2bda"
+  ]
+  [
+    "irmin-git.dev"
+    "git+https://github.com/mirage/irmin#806315563437cb8d77e32f75daee1408f32b2bda"
+  ]
+  [
+    "irmin-fs.dev"
+    "git+https://github.com/mirage/irmin#806315563437cb8d77e32f75daee1408f32b2bda"
+  ]
+  [
+    "irmin-graphql.dev"
+    "git+https://github.com/mirage/irmin#806315563437cb8d77e32f75daee1408f32b2bda"
+  ]
+  [
+    "irmin-http.dev"
+    "git+https://github.com/mirage/irmin#806315563437cb8d77e32f75daee1408f32b2bda"
+  ]
+  [
+    "irmin-layers.dev"
+    "git+https://github.com/mirage/irmin#806315563437cb8d77e32f75daee1408f32b2bda"
+  ]
+  [
+    "irmin-pack.dev"
+    "git+https://github.com/mirage/irmin#806315563437cb8d77e32f75daee1408f32b2bda"
+  ]
+  [
+    "irmin-unix.dev"
+    "git+https://github.com/mirage/irmin#806315563437cb8d77e32f75daee1408f32b2bda"
+  ]
+]
