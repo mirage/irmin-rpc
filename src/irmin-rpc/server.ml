@@ -80,7 +80,8 @@ functor
 
       let trees = Hashtbl.create 8
 
-      let read (t : t) = Hashtbl.find trees t
+      let read (t : t) =
+        try Hashtbl.find trees t with Not_found -> St.Tree.empty
 
       let rec local' (tree : St.tree) =
         let module Tree = Raw.Service.Tree in
@@ -275,6 +276,12 @@ functor
         Capability.when_released x (fun () -> Hashtbl.remove trees x);
         Hashtbl.replace trees x tree;
         x
+
+      let empty = local' St.Tree.empty
+
+      let empty () =
+        Capability.inc_ref empty;
+        empty
     end
 
     module Commit = struct
@@ -853,7 +860,7 @@ functor
             with_initialised_results
               (module Results)
               (fun results ->
-                let t = Tree.local St.Tree.empty in
+                let t = Tree.empty () in
                 Results.tree_set results (Some t);
                 Capability.dec_ref t;
                 Lwt.return @@ Ok ())
