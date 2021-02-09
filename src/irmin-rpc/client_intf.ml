@@ -104,7 +104,7 @@ module type S = sig
     val pack : t -> pack option Lwt.t
     (** Get [pack] capability *)
 
-    val last_modified : t -> key -> commit Lwt.t
+    val last_modified : t -> key -> commit option Lwt.t
     (** Returns the last commit containing changes to the specified key *)
   end
 
@@ -124,9 +124,11 @@ module type S = sig
   module Commit : sig
     type t = commit
 
+    val v : repo -> info:Irmin.Info.f -> parents:hash list -> tree -> t Lwt.t
+
     val check : commit -> bool Lwt.t
 
-    val of_hash : repo -> hash -> commit Lwt.t
+    val of_hash : repo -> hash -> commit option Lwt.t
     (** Get commit from specified hash *)
 
     val hash : commit -> hash Lwt.t
@@ -214,6 +216,10 @@ module type S = sig
 
     val remove : tree -> key -> tree Lwt.t
     (** Remove a key from an existing tree *)
+
+    val list : tree -> key -> step list Lwt.t
+
+    val clear : tree -> unit Lwt.t
   end
 
   module Contents : sig

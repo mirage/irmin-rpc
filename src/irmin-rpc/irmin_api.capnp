@@ -7,6 +7,7 @@ using Hash = Data;
 using Contents = Data;
 using Endpoint = Data;
 using Key = Text;
+using Step = Text;
 
 # Irmin.info
 struct Info {
@@ -62,10 +63,12 @@ interface Tree {
   # Remove a value from the tree
   remove   @9  (key :Key) -> (tree :Tree);
 
-  listKeys @10 (key :Key) -> (keys :List(Key));
+  list @10 (key :Key) -> (items :List(Step));
 
   # Check if tree exists
   check       @11 () -> (bool :Bool);
+
+  clear       @12 () -> ();
 }
 
 interface Commit {
@@ -201,6 +204,9 @@ interface Repo {
 
   # Create an empty tree
   emptyTree @7 () -> (tree :Tree);
+
+  # Create commit
+  createCommit @8 (info :Info, parents :List(Hash), tree :Tree) -> (commit :Commit);
 }
 
 # The top-level interface of an RPC server

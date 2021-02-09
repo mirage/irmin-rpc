@@ -131,7 +131,9 @@ functor
               (fun results ->
                 let contents = contents |> Codec.Contents.decode |> unwrap in
                 let+ tree = St.Tree.add tree (unwrap key) contents in
-                Results.tree_set results (Some (local tree));
+                let x = local tree in
+                Results.tree_set results (Some x);
+                Capability.dec_ref x;
                 Ok ())
 
           method find_tree_impl params release_param_caps =
@@ -146,7 +148,10 @@ functor
                   St.Tree.find_tree tree (unwrap key)
                 in
                 Option.iter
-                  (fun c -> Results.tree_set results (Some (local c)))
+                  (fun c ->
+                    let x = local c in
+                    Results.tree_set results (Some x);
+                    Capability.dec_ref x)
                   c;
                 Lwt.return (Ok ()))
 
@@ -161,7 +166,9 @@ functor
               (fun results ->
                 let tr = read (Option.get tr) in
                 let+ tt = St.Tree.add_tree tree (unwrap key) tr in
-                Results.tree_set results (Some (local tt));
+                let tt = local tt in
+                Results.tree_set results (Some tt);
+                Capability.dec_ref tt;
                 Ok ())
 
           method mem_impl params release_param_caps =
@@ -220,25 +227,25 @@ functor
               (module Results)
               (fun results ->
                 let* tree = St.Tree.remove tree (unwrap key) in
-                Results.tree_set results (Some (local tree));
+                let tt = local tree in
+                Results.tree_set results (Some tt);
+                Capability.dec_ref tt;
                 Lwt.return @@ Ok ())
 
-          method list_keys_impl params release_param_caps =
-            let open Tree.ListKeys in
+          method list_impl params release_param_caps =
+            let open Tree.List in
             let key = Params.key_get params |> Codec.Key.decode in
             release_param_caps ();
-            log_key_result (module St) "Tree.list_keys" key;
+            log_key_result (module St) "Tree.list" key;
             with_initialised_results
               (module Results)
               (fun results ->
                 let key = unwrap key in
                 let* tree = St.Tree.list tree key in
                 let l =
-                  List.map
-                    (fun (step, _) -> St.Key.rcons key step |> Codec.Key.encode)
-                    tree
+                  List.map (fun (step, _) -> Codec.Key.Step.encode step) tree
                 in
-                Results.keys_set_list results l |> ignore;
+                Results.items_set_list results l |> ignore;
                 Lwt.return @@ Ok ())
 
           method check_impl _params release_param_caps =
@@ -249,6 +256,16 @@ functor
               (module Results)
               (fun results ->
                 Results.bool_set results true;
+                Lwt.return_ok ())
+
+          method clear_impl _params release_param_caps =
+            let open Tree.Clear in
+            release_param_caps ();
+            Logs.info (fun f -> f "Tree.clear");
+            with_initialised_results
+              (module Results)
+              (fun _results ->
+                St.Tree.clear tree;
                 Lwt.return_ok ())
         end
         |> Tree.local
@@ -836,8 +853,39 @@ functor
             with_initialised_results
               (module Results)
               (fun results ->
-                Results.tree_set results (Some (Tree.local St.Tree.empty));
+                let t = Tree.local St.Tree.empty in
+                Results.tree_set results (Some t);
+                Capability.dec_ref t;
                 Lwt.return @@ Ok ())
+
+          method create_commit_impl params release_param_caps =
+            let open Repo.CreateCommit in
+            let info = Params.info_get params in
+            let parents = Params.parents_get_list params in
+            let tree = Params.tree_get params in
+            release_param_caps ();
+            Logs.info (fun f -> f "Repo.create_commit");
+            with_initialised_results
+              (module Results)
+              (fun results ->
+                Logs.info (fun l -> l "XXX");
+                let parents =
+                  List.map (fun x -> Codec.Hash.decode x |> unwrap) parents
+                in
+                Logs.info (fun l -> l "AAA");
+                let info = Codec.Info.decode info in
+
+                Logs.info (fun l -> l "BBB");
+                let tree = Tree.read (Option.get tree) in
+
+                Logs.info (fun l -> l "CCC");
+                let* commit = St.Commit.v repo ~info ~parents tree in
+
+                Logs.info (fun l -> l "DDD");
+                let commit = Commit.local commit in
+                Results.commit_set results (Some commit);
+                Capability.dec_ref commit;
+                Lwt.return_ok ())
         end
         |> Repo.local
     end

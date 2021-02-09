@@ -3,7 +3,7 @@ module Store =
     (struct
       let stable_hash = 32
 
-      let entries = 32
+      let entries = 256
     end)
     (Irmin.Metadata.None)
     (Irmin.Contents.String)

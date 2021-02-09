@@ -6,7 +6,6 @@ let () =
   Logs.set_reporter (Logs_fmt.reporter ())
 
 let config path =
-  print_endline path;
   let head = Git.Reference.of_string "refs/heads/master" |> Result.get_ok in
   Irmin_git.config ~head path
 
@@ -33,8 +32,7 @@ let run (Irmin_unix.Resolver.S ((module Store), store, _)) host port secret_key
           output_string f (Uri.to_string (Rpc.Server.uri server));
           close_out f
       | None ->
-          Printf.printf "Serving on: %s\n%!"
-            (Uri.to_string (Rpc.Server.uri server))
+          Logs.app (fun l -> l "%s" (Uri.to_string (Rpc.Server.uri server)))
     in
     fst (Lwt.wait ())
   in
