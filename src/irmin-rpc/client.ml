@@ -466,12 +466,13 @@ functor
         log_key (module Store) "Store.set_tree" key;
         let req, p = Capability.Request.create Params.init_pointer in
         Codec.Key.encode key |> Params.key_set p;
-        Params.tree_set p (Some tree);
-        let (_ : Raw.Builder.Info.t) =
-          info () |> Codec.Info.encode |> Params.info_set_builder p
-        in
-        Capability.with_ref t (fun t ->
-            Capability.call_for_unit_exn t method_id req)
+        Capability.with_ref tree (fun tree ->
+            Params.tree_set p (Some tree);
+            let (_ : Raw.Builder.Info.t) =
+              info () |> Codec.Info.encode |> Params.info_set_builder p
+            in
+            Capability.with_ref t (fun t ->
+                Capability.call_for_unit_exn t method_id req))
 
       let test_and_set_tree ~info t key ~test ~set =
         let open Raw.Client.Store.TestAndSetTree in
@@ -523,10 +524,12 @@ functor
           let open Raw.Client.Store.Sync in
           Logs.info (fun l -> l "Store.sync");
           let req = Capability.Request.create_no_args () in
-          let c =
-            Capability.call_for_caps t method_id req Results.sync_get_pipelined
-          in
-          Lwt.return @@ Some c
+          Capability.with_ref t (fun t ->
+              let c =
+                Capability.call_for_caps t method_id req
+                  Results.sync_get_pipelined
+              in
+              Lwt.return @@ Some c)
 
       let pack t =
         if Option.is_some Pack.v then Lwt.return None
@@ -534,10 +537,12 @@ functor
           let open Raw.Client.Store.Pack in
           Logs.info (fun l -> l "Store.pack");
           let req = Capability.Request.create_no_args () in
-          let cap =
-            Capability.call_for_caps t method_id req Results.pack_get_pipelined
-          in
-          Lwt.return @@ Some cap
+          Capability.with_ref t (fun t ->
+              let cap =
+                Capability.call_for_caps t method_id req
+                  Results.pack_get_pipelined
+              in
+              Lwt.return @@ Some cap)
 
       let last_modified t key =
         let open Raw.Client.Store.LastModified in
