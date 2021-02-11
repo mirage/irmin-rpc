@@ -211,6 +211,9 @@ module type S = sig
     val concrete : tree -> concrete Lwt.t
     (** Return a concrete representation of a tree *)
 
+    val of_concrete : repo -> concrete -> tree Lwt.t
+    (** Create a remote tree from a [concrete] tree *)
+
     val find_hash : tree -> key -> hash option Lwt.t
     (** Get hash of contents at the given key *)
 
@@ -224,6 +227,9 @@ module type S = sig
 
   module Contents : sig
     include Irmin.Contents.S with type t = contents
+
+    val import : repo -> contents list -> hash list Lwt.t
+    (** import contents to the repo, returning a hash for each item *)
 
     val of_hash : repo -> hash -> contents option Lwt.t
     (** Get hash from contents, this function uses caching to avoid calling to

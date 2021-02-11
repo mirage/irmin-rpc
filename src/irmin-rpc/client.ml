@@ -237,7 +237,7 @@ functor
 
       let add tree key value =
         let open Raw.Client.Tree.Add in
-        Logs.info (fun l -> l "Tree.add");
+        (*Logs.info (fun l -> l "Tree.add");*)
         let req, p = Capability.Request.create Params.init_pointer in
         Params.key_set p (Codec.Key.encode key);
         Params.contents_set p (Codec.Contents.encode value);
@@ -294,6 +294,17 @@ functor
         in
         let concrete = Results.concrete_get x in
         Codec.Tree.decode concrete
+
+      let of_concrete repo concrete =
+        let open Raw.Client.Repo.TreeOfConcrete in
+        Logs.info (fun l -> l "Tree.of_concrete");
+        let req, p = Capability.Request.create Params.init_pointer in
+        let* tree = Codec.Tree.encode concrete in
+        Params.concrete_set_builder p tree |> ignore;
+        let x =
+          Capability.call_for_caps repo method_id req Results.tree_get_pipelined
+        in
+        Lwt.return x
 
       let find_hash t key =
         let open Raw.Client.Tree.FindHash in
@@ -648,6 +659,18 @@ functor
               (fun repo ->
                 let+ x = of_hash repo x in
                 Option.get x)
+
+      let import repo contents =
+        let open Raw.Client.Repo.ImportContents in
+        Logs.info (fun l -> l "Contents.import");
+        let req, p = Capability.Request.create Params.init_pointer in
+        let _ =
+          Params.values_set_list p (List.map Codec.Contents.encode contents)
+        in
+        let+ x = Capability.call_for_value_exn repo method_id req in
+        List.map
+          (fun x -> Codec.Hash.decode x |> unwrap)
+          (Results.hash_get_list x)
     end
 
     let repo t =

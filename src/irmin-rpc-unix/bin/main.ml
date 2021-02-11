@@ -2,7 +2,7 @@ open Cmdliner
 open Lwt.Infix
 
 let () =
-  Logs.set_level (Some Logs.Info);
+  Logs.set_level (Some Logs.App);
   Logs.set_reporter (Logs_fmt.reporter ())
 
 let config path =

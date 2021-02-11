@@ -6,8 +6,8 @@ using Hash = Data;
 # Store.contents
 using Contents = Data;
 using Endpoint = Data;
-using Key = Text;
-using Step = Text;
+using Key = Data;
+using Step = Data;
 
 # Irmin.info
 struct Info {
@@ -20,7 +20,7 @@ struct Info {
 # Store.Tree
 interface Tree {
   struct Node {
-    step  @0  :Text;
+    step  @0  :Step;
     tree  @1  :Concrete;
   }
 
@@ -207,6 +207,12 @@ interface Repo {
 
   # Create commit
   createCommit @8 (info :Info, parents :List(Hash), tree :Tree) -> (commit :Commit);
+
+  # Add contents and return hash
+  importContents @9 (values :List(Contents)) -> (hash :List(Hash));
+
+  # Convert a concrete tree to `Tree`
+  treeOfConcrete @10 (concrete :Tree.Concrete) -> (tree :Tree);
 }
 
 # The top-level interface of an RPC server
