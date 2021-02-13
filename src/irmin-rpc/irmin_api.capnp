@@ -39,36 +39,39 @@ interface Tree {
   # Get the tree with a root at `key`
   findTree @1 (key :Key) -> (tree :Tree);
 
-  # Add a value
-  add @2 (key :Key, contents :Contents) -> (tree :Tree);
-
-  # Add a tree
-  addTree @3 (key :Key, tree :Tree) -> (tree :Tree);
-
   # Check if there is a value associated with `key`
-  mem @4 (key :Key) -> (exists :Bool);
+  mem @2 (key :Key) -> (exists :Bool);
 
   # Check if there is a tree associated with `key`
-  memTree @5 (key :Key) -> (exists :Bool);
+  memTree @3 (key :Key) -> (exists :Bool);
 
   # Get a concrete representation of an Irmin tree
-  getConcrete @6 () -> (concrete :Concrete);
+  getConcrete @4 () -> (concrete :Concrete);
 
   # Get tree hash
-  hash @7 () -> (hash :Hash);
+  hash @5 () -> (hash :Hash);
 
   # Find hash for value associated with `key`
-  findHash @8 (key :Key) -> (hash :Hash);
+  findHash @6 (key :Key) -> (hash :Hash);
 
-  # Remove a value from the tree
-  remove   @9  (key :Key) -> (tree :Tree);
-
-  list @10 (key :Key) -> (items :List(Step));
+  list @7 (key :Key) -> (items :List(Step));
 
   # Check if tree exists
-  check       @11 () -> (bool :Bool);
+  check       @8 () -> (bool :Bool);
+}
 
-  clear       @12 () -> ();
+# Writeable trees
+interface Tx {
+  # Add a value
+  add @0 (key :Key, contents :Contents) -> ();
+
+  # Add a tree
+  addTree @1 (key :Key, tree :Tree) -> ();
+
+  # Remove a value from the tree
+  remove   @2  (key :Key) -> ();
+
+  tree @3 () -> (tree :Tree);
 }
 
 interface Commit {
@@ -213,6 +216,9 @@ interface Repo {
 
   # Convert a concrete tree to `Tree`
   treeOfConcrete @10 (concrete :Tree.Concrete) -> (tree :Tree);
+
+
+  tx @11 (tree :Tree) -> (tx :Tx);
 }
 
 # The top-level interface of an RPC server

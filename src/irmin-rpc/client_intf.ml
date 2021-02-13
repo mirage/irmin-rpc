@@ -14,6 +14,8 @@ module Types = struct
   type pack = Raw.Client.Pack.t Capability.t
 
   type tree = Raw.Client.Tree.t Capability.t
+
+  type tx = Raw.Client.Tx.t Capability.t
 end
 
 module type S = sig
@@ -196,12 +198,6 @@ module type S = sig
     val get_tree : t -> key -> tree Lwt.t
     (** Get a subtree *)
 
-    val add : tree -> key -> contents -> tree Lwt.t
-    (** Add new key/value to tree *)
-
-    val add_tree : tree -> key -> tree -> tree Lwt.t
-    (** Add subtree *)
-
     val mem : tree -> key -> bool Lwt.t
     (** Check if contents exist at the given key *)
 
@@ -217,12 +213,26 @@ module type S = sig
     val find_hash : tree -> key -> hash option Lwt.t
     (** Get hash of contents at the given key *)
 
-    val remove : tree -> key -> tree Lwt.t
-    (** Remove a key from an existing tree *)
-
     val list : tree -> key -> step list Lwt.t
+  end
 
-    val clear : tree -> unit Lwt.t
+  module Tx : sig
+    type t = tx
+
+    val v : repo -> tree -> tx Lwt.t
+    (** Convert a [Tree] into an editable [Tx] *)
+
+    val remove : tx -> key -> unit Lwt.t
+    (** Remove a key from [Tx] *)
+
+    val add : tx -> key -> contents -> unit Lwt.t
+    (** Add new key/value to [Tx] *)
+
+    val add_tree : tx -> key -> tree -> unit Lwt.t
+    (** Add subtree *)
+
+    val tree : tx -> tree Lwt.t
+    (** Get [Tree] from [Tx] *)
   end
 
   module Contents : sig

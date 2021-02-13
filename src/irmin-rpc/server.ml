@@ -29,16 +29,6 @@ let with_initialised_results (type t) (module Results : RESULTS with type t = t)
       let+ x = f results in
       Result.map (fun () -> response) x)
 
-module Token : sig
-  type t
-
-  val gen : unit -> t
-end = struct
-  type t = int64
-
-  let gen () = Random.int64 Int64.max_int
-end
-
 module Make : MAKER =
 functor
   (St : Irmin.S)
@@ -88,23 +78,9 @@ functor
     module Tree = struct
       type t = Raw.Client.Tree.t cap
 
-      let trees : (Token.t, St.tree) Hashtbl.t = Hashtbl.create 8
+      let trees = Hashtbl.create 8
 
-      let tokens : (t, Token.t) Hashtbl.t = Hashtbl.create 8
-
-      let read (t : t) =
-        let t = Hashtbl.find tokens t in
-        Hashtbl.find trees t
-
-      let remove (t : t) =
-        let t' = Hashtbl.find tokens t in
-        Hashtbl.remove trees t';
-        Hashtbl.remove tokens t
-
-      let replace (t : Token.t) tree = Hashtbl.replace trees t tree
-
-      let rec local' (token : Token.t) =
-        let tree = Hashtbl.find trees token in
+      let rec local' tree =
         let module Tree = Raw.Service.Tree in
         object
           inherit Tree.service
@@ -142,23 +118,6 @@ functor
                   x;
                 Ok ())
 
-          method add_impl params release_param_caps =
-            let open Tree.Add in
-            let key = Params.key_get params |> Codec.Key.decode in
-            let contents = Params.contents_get params in
-            release_param_caps ();
-            log_key_result (module St) "Tree.add" key;
-            with_initialised_results
-              (module Results)
-              (fun results ->
-                let contents = contents |> Codec.Contents.decode |> unwrap in
-                let+ tree = St.Tree.add tree (unwrap key) contents in
-                let x = local tree in
-                let () = replace token tree in
-                Results.tree_set results (Some x);
-                Capability.dec_ref x;
-                Ok ())
-
           method find_tree_impl params release_param_caps =
             let open Tree.FindTree in
             let key = Params.key_get params |> Codec.Key.decode in
@@ -178,23 +137,6 @@ functor
                   c;
                 Lwt.return (Ok ()))
 
-          method add_tree_impl params release_param_caps =
-            let open Tree.AddTree in
-            let key = Params.key_get params |> Codec.Key.decode in
-            let tr = Params.tree_get params in
-            release_param_caps ();
-            log_key_result (module St) "Tree.add_tree" key;
-            with_initialised_results
-              (module Results)
-              (fun results ->
-                let tr = read (Option.get tr) in
-                let+ tree' = St.Tree.add_tree tree (unwrap key) tr in
-                let t = local tree' in
-                replace token tree';
-                Results.tree_set results (Some t);
-                Capability.dec_ref t;
-                Ok ())
-
           method mem_impl params release_param_caps =
             let open Tree.Mem in
             let key = Params.key_get params |> Codec.Key.decode in
@@ -205,7 +147,7 @@ functor
               (fun results ->
                 let* e = St.Tree.mem tree (unwrap key) in
                 Results.exists_set results e;
-                Lwt.return (Ok ()))
+                Lwt.return_ok ())
 
           method mem_tree_impl params release_param_caps =
             let open Tree.MemTree in
@@ -242,21 +184,6 @@ functor
                 Results.hash_set results (Codec.Hash.encode hash);
                 Lwt.return @@ Ok ())
 
-          method remove_impl params release_param_caps =
-            let open Tree.Remove in
-            let key = Params.key_get params |> Codec.Key.decode in
-            release_param_caps ();
-            log_key_result (module St) "Tree.remove" key;
-            with_initialised_results
-              (module Results)
-              (fun results ->
-                let* tree = St.Tree.remove tree (unwrap key) in
-                let tt = local tree in
-                let () = replace token tree in
-                Results.tree_set results (Some tt);
-                Capability.dec_ref tt;
-                Lwt.return @@ Ok ())
-
           method list_impl params release_param_caps =
             let open Tree.List in
             let key = Params.key_get params |> Codec.Key.decode in
@@ -282,25 +209,13 @@ functor
               (fun results ->
                 Results.bool_set results true;
                 Lwt.return_ok ())
-
-          method clear_impl _params release_param_caps =
-            let open Tree.Clear in
-            release_param_caps ();
-            Logs.info (fun f -> f "Tree.clear");
-            with_initialised_results
-              (module Results)
-              (fun _results ->
-                St.Tree.clear tree;
-                Lwt.return_ok ())
         end
         |> Tree.local
 
       and local (tree : St.tree) : t =
-        let token = Token.gen () in
-        Hashtbl.replace trees token tree;
-        let x = local' token in
-        Hashtbl.replace tokens x token;
-        Capability.when_released x (fun () -> remove x);
+        let x = local' tree in
+        Hashtbl.replace trees x tree;
+        Capability.when_released x (fun () -> Hashtbl.remove trees x);
         x
 
       let empty = local St.Tree.empty
@@ -308,6 +223,71 @@ functor
       let empty () =
         Capability.inc_ref empty;
         empty
+    end
+
+    module Tx = struct
+      type t = Raw.Client.Tx.t cap
+
+      let rec local' (tree : St.tree ref) =
+        let module Tx = Raw.Service.Tx in
+        object
+          inherit Tx.service
+
+          method add_impl params release_param_caps =
+            let open Tx.Add in
+            let key = Params.key_get params |> Codec.Key.decode in
+            let contents = Params.contents_get params in
+            release_param_caps ();
+            log_key_result (module St) "Tx.add" key;
+            with_initialised_results
+              (module Results)
+              (fun _results ->
+                let contents = contents |> Codec.Contents.decode |> unwrap in
+                let+ tree' = St.Tree.add !tree (unwrap key) contents in
+                tree := tree';
+                Ok ())
+
+          method add_tree_impl params release_param_caps =
+            let open Tx.AddTree in
+            let key = Params.key_get params |> Codec.Key.decode in
+            let tr = Params.tree_get params in
+            release_param_caps ();
+            log_key_result (module St) "Tx.add_tree" key;
+            with_initialised_results
+              (module Results)
+              (fun _results ->
+                let tr = Hashtbl.find Tree.trees (Option.get tr) in
+                let* tree' = St.Tree.add_tree !tree (unwrap key) tr in
+                tree := tree';
+                Lwt.return_ok ())
+
+          method remove_impl params release_param_caps =
+            let open Tx.Remove in
+            let key = Params.key_get params |> Codec.Key.decode in
+            release_param_caps ();
+            log_key_result (module St) "Tx.remove" key;
+            with_initialised_results
+              (module Results)
+              (fun _results ->
+                let* tree' = St.Tree.remove !tree (unwrap key) in
+                tree := tree';
+                Lwt.return_ok ())
+
+          method tree_impl _params release_param_caps =
+            let open Tx.Tree in
+            release_param_caps ();
+            Logs.info (fun f -> f "Tx.tree");
+            with_initialised_results
+              (module Results)
+              (fun results ->
+                let tree = Tree.local !tree in
+                Results.tree_set results (Some tree);
+                Capability.dec_ref tree;
+                Lwt.return_ok ())
+        end
+        |> Tx.local
+
+      and local (tree : St.tree) : t = local' (ref tree)
     end
 
     module Commit = struct
@@ -335,7 +315,7 @@ functor
                 let tree = Tree.local tree in
                 let _ = Results.tree_set results (Some tree) in
                 Capability.dec_ref tree;
-                Lwt.return @@ Ok ())
+                Lwt.return_ok ())
 
           method parents_impl _params release_param_caps =
             let open Commit.Parents in
@@ -348,7 +328,7 @@ functor
                   St.Commit.parents commit |> List.map Codec.Hash.encode
                 in
                 ignore_result_set (Results.hashes_set_list results parents);
-                Lwt.return (Ok ()))
+                Lwt.return_ok ())
 
           method info_impl _params release_param_caps =
             let open Commit.Info in
@@ -362,7 +342,7 @@ functor
                   |> Codec.Info.encode
                   |> Results.info_set_builder results
                 in
-                Lwt.return (Ok ()))
+                Lwt.return_ok ())
 
           method hash_impl _params release_param_caps =
             let open Commit.Hash in
@@ -373,7 +353,7 @@ functor
               (fun results ->
                 let hash = St.Commit.hash commit |> Codec.Hash.encode in
                 Results.hash_set results hash;
-                Lwt.return (Ok ()))
+                Lwt.return_ok ())
 
           method read_impl _params release_param_caps =
             let open Commit.Read in
@@ -610,7 +590,7 @@ functor
             log_key_result (module St) "Store.set_tree" key;
             Service.return_lwt (fun () ->
                 let info = info |> Codec.Info.decode in
-                let tree = Tree.read (Option.get tree) in
+                let tree = Hashtbl.find Tree.trees (Option.get tree) in
                 let+! () =
                   St.set_tree ~info:(fun () -> info) store (unwrap key) tree
                   |> process_write_error
@@ -757,9 +737,10 @@ functor
             release_param_caps ();
             log_key_result (module St) "Store.test_and_set_tree" key;
             Service.return_lwt (fun () ->
+                let get x = Hashtbl.find Tree.trees x in
                 let info = info |> Codec.Info.decode
-                and test = Option.map (fun x -> Tree.read x) test
-                and set = Option.map (fun x -> Tree.read x) set in
+                and test = Option.map get test
+                and set = Option.map get set in
                 let+! () =
                   St.test_and_set_tree
                     ~info:(fun () -> info)
@@ -889,7 +870,7 @@ functor
                 let t = Tree.empty () in
                 Results.tree_set results (Some t);
                 Capability.dec_ref t;
-                Lwt.return @@ Ok ())
+                Lwt.return_ok ())
 
           method create_commit_impl params release_param_caps =
             let open Repo.CreateCommit in
@@ -909,7 +890,7 @@ functor
                 let info = Codec.Info.decode info in
 
                 Logs.info (fun l -> l "BBB");
-                let tree = Tree.read (Option.get tree) in
+                let tree = Hashtbl.find Tree.trees (Option.get tree) in
 
                 Logs.info (fun l -> l "CCC");
                 let* commit = St.Commit.v repo ~info ~parents tree in
@@ -958,6 +939,22 @@ functor
                 Results.tree_set results (Some tree);
                 Capability.dec_ref tree;
                 Ok ())
+
+          method tx_impl params release_param_caps =
+            let open Repo.Tx in
+            let tree = Params.tree_get params in
+            release_param_caps ();
+            Logs.info (fun l -> l "Repo.tx");
+            with_initialised_results
+              (module Results)
+              (fun results ->
+                let tree =
+                  try Hashtbl.find Tree.trees (Option.get tree)
+                  with Not_found -> St.Tree.empty
+                in
+                let tx = Tx.local tree in
+                Results.tx_set results (Some tx);
+                Lwt.return_ok ())
         end
         |> Repo.local
     end

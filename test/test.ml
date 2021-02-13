@@ -140,9 +140,11 @@ module Test_store = struct
     let info () = Faker.info () in
     let* master = Client.Store.master client in
     let* tree = Client.Tree.empty client in
-    let* tree = Client.Tree.add tree [ "a" ] (random_string 2048) in
-    let* tree = Client.Tree.add_tree tree [ "b" ] tree in
-    let* tree = Client.Tree.remove tree [ "b" ] in
+    let* tx = Client.Tx.v client tree in
+    let* () = Client.Tx.add tx [ "a" ] (random_string 2048) in
+    let* () = Client.Tx.add_tree tx [ "b" ] tree in
+    let* () = Client.Tx.remove tx [ "b" ] in
+    let* tree = Client.Tx.tree tx in
     let* () = Client.Store.set_tree master [ "tree" ] tree ~info in
     let* tree = Client.Tree.concrete tree >>= resolve_tree server in
     let* master = Server.master server in
@@ -183,9 +185,11 @@ module Test_store = struct
     let info () = Faker.info () in
     let* master = Client.Store.master client in
     let* tree = Client.Tree.empty client in
-    let* tree = Client.Tree.add tree [ "a" ] "1" in
-    let* tree = Client.Tree.add tree [ "b" ] "2" in
-    let* tree = Client.Tree.add tree [ "c" ] "3" in
+    let* tx = Client.Tx.v client tree in
+    let* () = Client.Tx.add tx [ "a" ] "1" in
+    let* () = Client.Tx.add tx [ "b" ] "2" in
+    let* () = Client.Tx.add tx [ "c" ] "3" in
+    let* tree = Client.Tx.tree tx in
     let* ok =
       Client.Store.test_and_set_tree master ~info [ "test"; "tree" ] ~test:None
         ~set:(Some tree)

@@ -59,7 +59,7 @@ module Generate_trees_from_trace
                with type contents = string
                 and type key = string list) =
 struct
-  type t = { mutable tree : Store.tree }
+  type t = { mutable tx : Store.tx }
 
   type stats = {
     mutable adds : int;
@@ -88,28 +88,29 @@ struct
         match operation with
         | Add (key, v) ->
             stats.adds <- succ stats.adds;
-            let+ tree = Store.Tree.add t.tree key v in
-            t.tree <- tree;
+            let+ _ = Store.Tx.add t.tx key v in
             (i + 1, prev_commit)
         | Remove keys ->
             stats.removes <- succ stats.removes;
-            let+ tree = Store.Tree.remove t.tree keys in
-            t.tree <- tree;
+            let+ _ = Store.Tx.remove t.tx keys in
             (i + 1, prev_commit)
         | Find (keys, b) -> (
             stats.finds <- succ stats.finds;
-            Store.Tree.find t.tree keys >|= function
+            let* tree = Store.Tx.tree t.tx in
+            Store.Tree.find tree keys >|= function
             | None when not b -> (i + 1, prev_commit)
             | Some _ when b -> (i + 1, prev_commit)
             | _ -> error_find "find" keys b i n)
         | Mem (keys, b) ->
             stats.mems <- succ stats.mems;
-            let+ b' = Store.Tree.mem t.tree keys in
+            let* tree = Store.Tx.tree t.tx in
+            let+ b' = Store.Tree.mem tree keys in
             if b <> b' then error_find "mem" keys b i n;
             (i + 1, prev_commit)
         | Mem_tree (keys, b) ->
             stats.mem_tree <- succ stats.mem_tree;
-            let+ b' = Store.Tree.mem_tree t.tree keys in
+            let* tree = Store.Tx.tree t.tx in
+            let+ b' = Store.Tree.mem_tree tree keys in
             if b <> b' then error_find "mem_tree" keys b i n;
             (i + 1, prev_commit)
         | Checkout _ ->
@@ -117,33 +118,38 @@ struct
             (match commit with
             | None -> Fmt.failwith "prev commit not found"
             | Some commit ->
-                Store.Commit.tree commit >|= fun tree -> t.tree <- tree)
+                Store.Commit.tree commit >>= fun tree ->
+                let+ tx = Store.Tx.v repo tree in
+                t.tx <- tx)
             >|= fun () -> (i + 1, prev_commit)
         | Copy (from, to_) -> (
             stats.copies <- succ stats.copies;
-            Store.Tree.find_tree t.tree from >>= function
+
+            let* tree = Store.Tx.tree t.tx in
+            Store.Tree.find_tree tree from >>= function
             | None -> Lwt.return (i + 1, prev_commit)
             | Some sub_tree ->
-                let+ tree = Store.Tree.add_tree t.tree to_ sub_tree in
-                t.tree <- tree;
+                let+ _ = Store.Tx.add_tree t.tx to_ sub_tree in
                 (i + 1, prev_commit))
         | Commit (_, date, message, _) ->
             (* in tezos commits call Tree.list first for the unshallow operation *)
-            let* _ = Store.Tree.list t.tree [] in
+            let* tree = Store.Tx.tree t.tx in
+            let* _ = Store.Tree.list tree [] in
             let info () = Irmin.Info.v ~date ~author:"Tezos" message in
             let parents =
               match prev_commit with None -> [] | Some p -> [ p ]
             in
             Logs.info (fun l -> l "CCC");
-            let* commit = Store.Commit.v repo ~info ~parents t.tree in
-            let* () = Store.Tree.clear t.tree in
+            let* commit = Store.Commit.v repo ~info ~parents tree in
+            (*let* () = Store.Tree.clear t.tree in*)
             let+ hash = Store.Commit.hash commit in
             (i + 1, Some hash))
       (0, prev_commit) operations
 
   let add_commits repo commits () =
     let* tree = Store.Tree.empty repo in
-    let t = { tree } in
+    let* tx = Store.Tx.v repo tree in
+    let t = { tx } in
     let rec array_iter_lwt prev_commit i =
       if i >= Array.length commits then Lwt.return_unit
       else
@@ -212,7 +218,9 @@ struct
     | None -> Lwt.fail_with "commit not found"
     | Some commit ->
         let* tree = Rpc.Client.Commit.tree commit in
-        let* tree = f tree in
+        let* tx = Rpc.Client.Tx.v repo tree in
+        let* tx = f tx in
+        let* tree = Rpc.Client.Tx.tree tx in
         Logs.info (fun l -> l "BBB");
         Rpc.Client.Commit.v repo ~info ~parents:[ prev_commit ] tree
 

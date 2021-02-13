@@ -19,9 +19,11 @@ let main =
   let* repo = Client.repo client in
   let* master = Client.Store.master repo in
   let* tree = Client.Tree.empty repo in
-  let* tree = Client.Tree.add tree [ "a" ] "1" in
-  let* tree = Client.Tree.add tree [ "x"; "y"; "z" ] "999" in
+  let* tx = Client.Tx.v repo tree in
+  let* () = Client.Tx.add tx [ "a" ] "1" in
+  let* () = Client.Tx.add tx [ "x"; "y"; "z" ] "999" in
 
+  let* tree = Client.Tx.tree tx in
   let* a = Client.Tree.find tree [ "a" ] in
   assert (Option.get a = "1");
   let* xyz = Client.Tree.find tree [ "x"; "y"; "z" ] in
@@ -30,8 +32,8 @@ let main =
   let* z = Client.Tree.find (Option.get t) [ "z" ] in
   assert (Option.get z = "999");
 
-  let* tree = Client.Tree.remove tree [ "a" ] in
-
+  let* () = Client.Tx.remove tx [ "a" ] in
+  let* tree = Client.Tx.tree tx in
   let* () = Client.Store.set_tree master ~info [] tree in
   let* a = Client.Store.find master [ "a" ] in
   assert (Result.get_ok a = None);
