@@ -314,13 +314,19 @@ functor
         end
         |> Tx.local
 
+      and tx_limit = 32
+
       and local client repo (tree : St.tree) : t =
-        let r = ref tree in
-        let x = local' client repo r in
-        Hashtbl.replace client.Context.tx x r;
-        Capability.when_released x (fun () ->
-            Hashtbl.remove client.Context.tx x);
-        x
+        (* TODO: make this limit configurable *)
+        if Hashtbl.length client.Context.tx > tx_limit then
+          failwith "Too many transactions"
+        else
+          let r = ref tree in
+          let x = local' client repo r in
+          Hashtbl.replace client.Context.tx x r;
+          Capability.when_released x (fun () ->
+              Hashtbl.remove client.Context.tx x);
+          x
     end
 
     module Commit = struct
