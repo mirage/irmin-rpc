@@ -228,6 +228,10 @@ module type S = sig
     val add : tx -> key -> contents -> unit Lwt.t
     (** Add new key/value to [Tx] *)
 
+    val add_contents : tx -> key -> hash -> unit Lwt.t
+    (** Add new key/value to [Tx] using the contents hash instead of the direct
+        value *)
+
     val add_tree : tx -> key -> tree -> unit Lwt.t
     (** Add subtree *)
 

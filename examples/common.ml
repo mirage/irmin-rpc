@@ -9,7 +9,7 @@ module Store =
     (Irmin.Contents.String)
     (Irmin.Path.String_list)
     (Irmin.Branch.String)
-    (Irmin.Hash.BLAKE2B)
+    (Irmin.Hash.SHA1)
 
 module Rpc =
   Irmin_rpc_unix.Make

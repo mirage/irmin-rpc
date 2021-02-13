@@ -9,10 +9,16 @@ module type S = sig
 
   type hash
 
+  module Context : sig
+    type t
+
+    val empty : unit -> t
+  end
+
   module Commit : sig
     type t = Raw.Client.Commit.t cap
 
-    val local : commit -> t
+    val local : Context.t -> commit -> t
 
     val read :
       repo ->
@@ -23,13 +29,13 @@ module type S = sig
   module Store : sig
     type t = Raw.Client.Store.t cap
 
-    val local : store -> t
+    val local : Context.t -> store -> t
   end
 
   module Repo : sig
     type t = Raw.Client.Repo.t cap
 
-    val local : repo -> t
+    val local : Context.t -> repo -> t
   end
 
   val local : repo -> Raw.Client.Irmin.t cap

@@ -38,6 +38,12 @@ functor
   struct
     module P = Pack
 
+    module Context = struct
+      type t = { a : int }
+
+      let empty () = { a = 1 }
+    end
+
     let remote =
       match Remote.v with
       | Some x -> x
@@ -228,7 +234,7 @@ functor
     module Tx = struct
       type t = Raw.Client.Tx.t cap
 
-      let rec local' (tree : St.tree ref) =
+      let rec local' _client repo (tree : St.tree ref) =
         let module Tx = Raw.Service.Tx in
         object
           inherit Tx.service
@@ -244,6 +250,27 @@ functor
               (fun _results ->
                 let contents = contents |> Codec.Contents.decode |> unwrap in
                 let+ tree' = St.Tree.add !tree (unwrap key) contents in
+                tree := tree';
+                Ok ())
+
+          method add_contents_impl params release_param_caps =
+            let open Tx.AddContents in
+            let key = Params.key_get params |> Codec.Key.decode in
+            let hash = Params.hash_get params in
+            release_param_caps ();
+            log_key_result (module St) "Tx.add_contents" key;
+            with_initialised_results
+              (module Results)
+              (fun _results ->
+                let* contents =
+                  hash
+                  |> Codec.Hash.decode
+                  |> unwrap
+                  |> St.Contents.of_hash repo
+                in
+                let+ tree' =
+                  St.Tree.add !tree (unwrap key) (Option.get contents)
+                in
                 tree := tree';
                 Ok ())
 
@@ -287,7 +314,7 @@ functor
         end
         |> Tx.local
 
-      and local (tree : St.tree) : t = local' (ref tree)
+      and local client repo (tree : St.tree) : t = local' client repo (ref tree)
     end
 
     module Commit = struct
@@ -299,7 +326,7 @@ functor
         let* str = Capability.call_for_value_exn t method_id req in
         Codec.Commit.decode repo (Results.value_get str)
 
-      let local commit =
+      let local _client commit =
         let module Commit = Raw.Service.Commit in
         object
           inherit Commit.service
@@ -383,7 +410,7 @@ functor
     end
 
     module Pack = struct
-      let local repo =
+      let local _client repo =
         let (module P) = Option.get Pack.v in
         let repo : P.repo = Obj.magic repo in
         let module Pack = Raw.Service.Pack in
@@ -430,14 +457,14 @@ functor
         val result_set : t -> Raw.Client.Commit.t cap option -> unit
       end
 
-      let handle_pull (type t) (module Results : RESULT_SET with type t = t)
-          store results = function
+      let handle_pull client (type t)
+          (module Results : RESULT_SET with type t = t) store results = function
         | Ok _ ->
             St.Head.find store >|= fun head ->
             let () =
               match head with
               | Some head ->
-                  let commit = Commit.local head in
+                  let commit = Commit.local client head in
                   Results.result_set results (Some commit);
                   Capability.dec_ref commit
               | _ -> ()
@@ -445,7 +472,7 @@ functor
             Ok ()
         | Error e -> Lwt.return @@ Error (convert_error Sy.pp_pull_error e)
 
-      let local store =
+      let local client store =
         let module Sync = Raw.Service.Sync in
         object
           inherit Sync.service
@@ -483,7 +510,7 @@ functor
                   endpoint |> Remote.decode |> unwrap |> remote_of_endpoint
                 in
                 Sy.pull store remote (`Merge (fun () -> info))
-                >>= handle_pull
+                >>= handle_pull client
                       (module Results : RESULT_SET with type t = Results.t)
                       store results)
 
@@ -500,7 +527,7 @@ functor
                   endpoint |> Remote.decode |> unwrap |> remote_of_endpoint
                 in
                 Sy.pull store remote `Set
-                >>= handle_pull
+                >>= handle_pull client
                       (module Results : RESULT_SET with type t = Results.t)
                       store results)
         end
@@ -510,7 +537,7 @@ functor
     module Store = struct
       type t = Raw.Client.Store.t cap
 
-      let local store =
+      let local client store =
         let module Store = Raw.Service.Store in
         object
           inherit Store.service
@@ -666,7 +693,7 @@ functor
               (module Results)
               (fun results ->
                 if Option.is_some Remote.v then (
-                  let cap = Sync.local store in
+                  let cap = Sync.local client store in
                   Results.sync_set results (Some cap);
                   Capability.dec_ref cap);
                 Lwt.return @@ Ok ())
@@ -679,7 +706,7 @@ functor
               (module Results)
               (fun results ->
                 if Option.is_some P.v then (
-                  let cap = Pack.local (St.repo store) in
+                  let cap = Pack.local client (St.repo store) in
                   Results.pack_set results (Some cap);
                   Capability.dec_ref cap);
                 Lwt.return @@ Ok ())
@@ -695,7 +722,7 @@ functor
                 St.last_modified ~n:1 store (unwrap key) >|= function
                 | [] -> Ok ()
                 | x :: _ ->
-                    let commit = Commit.local x in
+                    let commit = Commit.local client x in
                     Results.commit_set results (Some commit);
                     Capability.dec_ref commit;
                     Ok ())
@@ -762,7 +789,7 @@ functor
           (Irmin.Type.unstage @@ Irmin.Type.compare St.Branch.t) a b
       end)
 
-      let local repo =
+      let local client repo =
         let module Repo = Raw.Service.Repo in
         object
           inherit Repo.service
@@ -775,7 +802,7 @@ functor
               (module Results)
               (fun results ->
                 let+ store = St.master repo in
-                let store_service = Store.local store in
+                let store_service = Store.local client store in
                 Results.store_set results (Some store_service);
                 Capability.dec_ref store_service;
                 Ok ())
@@ -790,7 +817,7 @@ functor
               (fun results ->
                 let branch = branch |> Codec.Branch.decode |> unwrap in
                 let+ store = St.of_branch repo branch in
-                let store_service = Store.local store in
+                let store_service = Store.local client store in
                 Results.store_set results (Some store_service);
                 Capability.dec_ref store_service;
                 Ok ())
@@ -838,7 +865,9 @@ functor
               (fun results ->
                 let hash = hash |> Codec.Hash.decode |> unwrap in
                 let+ commit = St.Commit.of_hash repo hash in
-                let commit = Option.map (fun c -> Commit.local c) commit in
+                let commit =
+                  Option.map (fun c -> Commit.local client c) commit
+                in
                 Results.commit_set results commit;
                 Option.iter Capability.dec_ref commit;
                 Ok ())
@@ -886,17 +915,10 @@ functor
                 let parents =
                   List.map (fun x -> Codec.Hash.decode x |> unwrap) parents
                 in
-                Logs.info (fun l -> l "AAA");
                 let info = Codec.Info.decode info in
-
-                Logs.info (fun l -> l "BBB");
                 let tree = Hashtbl.find Tree.trees (Option.get tree) in
-
-                Logs.info (fun l -> l "CCC");
                 let* commit = St.Commit.v repo ~info ~parents tree in
-
-                Logs.info (fun l -> l "DDD");
-                let commit = Commit.local commit in
+                let commit = Commit.local client commit in
                 Results.commit_set results (Some commit);
                 Capability.dec_ref commit;
                 Lwt.return_ok ())
@@ -952,7 +974,7 @@ functor
                   try Hashtbl.find Tree.trees (Option.get tree)
                   with Not_found -> St.Tree.empty
                 in
-                let tx = Tx.local tree in
+                let tx = Tx.local client repo tree in
                 Results.tx_set results (Some tx);
                 Lwt.return_ok ())
         end
@@ -964,7 +986,9 @@ functor
       object
         inherit I.service
 
-        val repo_service = Repo.local ctx
+        val repo_service =
+          let client = Context.empty () in
+          Repo.local client ctx
 
         method repo_impl _params release_param_caps =
           let open I.Repo in

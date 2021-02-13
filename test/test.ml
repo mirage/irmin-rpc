@@ -29,7 +29,8 @@ module Test_store = struct
 
   let ctx () =
     let+ server = Server.Repo.v (Irmin_mem.config ()) in
-    let client = RPC.Server.Repo.local server in
+    let ctx = RPC.Server.Context.empty () in
+    let client = RPC.Server.Repo.local ctx server in
     { server; client }
 
   let rec resolve_tree server (x : Client.Tree.concrete) =

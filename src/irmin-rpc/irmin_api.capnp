@@ -72,6 +72,8 @@ interface Tx {
   remove   @2  (key :Key) -> ();
 
   tree @3 () -> (tree :Tree);
+
+  addContents @4 (key :Key, hash :Hash) -> ();
 }
 
 interface Commit {

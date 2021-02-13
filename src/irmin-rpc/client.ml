@@ -316,6 +316,15 @@ functor
         (*Capability.with_ref tx (fun tx ->*)
         Capability.call_for_unit_exn tx method_id req
 
+      let add_contents tx key value =
+        let open Raw.Client.Tx.AddContents in
+        (*Logs.info (fun l -> l "Tx.add");*)
+        let req, p = Capability.Request.create Params.init_pointer in
+        Params.key_set p (Codec.Key.encode key);
+        Params.hash_set p (Codec.Hash.encode value);
+        (*Capability.with_ref tx (fun tx ->*)
+        Capability.call_for_unit_exn tx method_id req
+
       let add_tree tx key value =
         let open Raw.Client.Tx.AddTree in
         Logs.info (fun l -> l "Tx.add_tree");
@@ -439,8 +448,8 @@ functor
           info () |> Codec.Info.encode |> Params.info_set_builder p
         in
         Codec.Contents.encode contents |> Params.contents_set p;
-        Capability.with_ref t (fun t ->
-            Capability.call_for_unit_exn t method_id req)
+        (*Capability.with_ref t (fun t ->*)
+        Capability.call_for_unit_exn t method_id req
 
       let test_and_set ~info t key ~test ~set =
         let open Raw.Client.Store.TestAndSet in
@@ -469,8 +478,8 @@ functor
             let (_ : Raw.Builder.Info.t) =
               info () |> Codec.Info.encode |> Params.info_set_builder p
             in
-            Capability.with_ref t (fun t ->
-                Capability.call_for_unit_exn t method_id req))
+            (*Capability.with_ref t (fun t ->*)
+            Capability.call_for_unit_exn t method_id req)
 
       let test_and_set_tree ~info t key ~test ~set =
         let open Raw.Client.Store.TestAndSetTree in
@@ -668,9 +677,6 @@ functor
       let open Raw.Client.Irmin.Ping in
       Logs.info (fun l -> l "Irmin.ping");
       let req = Capability.Request.create_no_args () in
-      let+ res =
-        Capability.with_ref t (fun t ->
-            Capability.call_for_value t method_id req)
-      in
+      let+ res = Capability.call_for_value t method_id req in
       Result.map (fun _ -> ()) res
   end
