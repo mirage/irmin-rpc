@@ -39,9 +39,9 @@ functor
     module P = Pack
 
     module Context = struct
-      type t = { a : int }
+      type t = { tx : (Raw.Client.Tx.t cap, St.tree ref) Hashtbl.t }
 
-      let empty () = { a = 1 }
+      let empty () = { tx = Hashtbl.create 8 }
     end
 
     let remote =
@@ -314,7 +314,13 @@ functor
         end
         |> Tx.local
 
-      and local client repo (tree : St.tree) : t = local' client repo (ref tree)
+      and local client repo (tree : St.tree) : t =
+        let r = ref tree in
+        let x = local' client repo r in
+        Hashtbl.replace client.Context.tx x r;
+        Capability.when_released x (fun () ->
+            Hashtbl.remove client.Context.tx x);
+        x
     end
 
     module Commit = struct
