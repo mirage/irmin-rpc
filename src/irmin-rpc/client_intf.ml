@@ -237,6 +237,9 @@ module type S = sig
 
     val tree : tx -> tree Lwt.t
     (** Get [Tree] from [Tx] *)
+
+    val commit : tx -> store -> info:Irmin.Info.f -> key -> unit Lwt.t
+    (** Commit transaction *)
   end
 
   module Contents : sig

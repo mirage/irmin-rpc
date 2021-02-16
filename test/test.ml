@@ -145,8 +145,8 @@ module Test_store = struct
     let* () = Client.Tx.add tx [ "a" ] (random_string 2048) in
     let* () = Client.Tx.add_tree tx [ "b" ] tree in
     let* () = Client.Tx.remove tx [ "b" ] in
-    let* tree = Client.Tx.tree tx in
-    let* () = Client.Store.set_tree master [ "tree" ] tree ~info in
+    let* () = Client.Tx.commit tx master [ "tree" ] ~info in
+    let* tree = Client.Store.get_tree master [ "tree" ] in
     let* tree = Client.Tree.concrete tree >>= resolve_tree server in
     let* master = Server.master server in
     let* () =

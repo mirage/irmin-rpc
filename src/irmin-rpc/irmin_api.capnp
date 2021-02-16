@@ -219,7 +219,6 @@ interface Repo {
   # Convert a concrete tree to `Tree`
   treeOfConcrete @10 (concrete :Tree.Concrete) -> (tree :Tree);
 
-
   tx @11 (tree :Tree) -> (tx :Tx);
 }
 

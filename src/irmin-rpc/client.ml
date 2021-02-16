@@ -304,62 +304,6 @@ functor
         List.map (fun x -> Codec.Key.Step.decode x |> unwrap) l
     end
 
-    module Tx = struct
-      type t = tx
-
-      let add tx key value =
-        let open Raw.Client.Tx.Add in
-        (*Logs.info (fun l -> l "Tx.add");*)
-        let req, p = Capability.Request.create Params.init_pointer in
-        Params.key_set p (Codec.Key.encode key);
-        Params.contents_set p (Codec.Contents.encode value);
-        (*Capability.with_ref tx (fun tx ->*)
-        Capability.call_for_unit_exn tx method_id req
-
-      let add_contents tx key value =
-        let open Raw.Client.Tx.AddContents in
-        (*Logs.info (fun l -> l "Tx.add");*)
-        let req, p = Capability.Request.create Params.init_pointer in
-        Params.key_set p (Codec.Key.encode key);
-        Params.hash_set p (Codec.Hash.encode value);
-        (*Capability.with_ref tx (fun tx ->*)
-        Capability.call_for_unit_exn tx method_id req
-
-      let add_tree tx key value =
-        let open Raw.Client.Tx.AddTree in
-        Logs.info (fun l -> l "Tx.add_tree");
-        let req, p = Capability.Request.create Params.init_pointer in
-        Params.key_set p (Codec.Key.encode key);
-        Capability.with_ref value (fun value ->
-            Params.tree_set p (Some value);
-            (*Capability.with_ref tx (fun tx ->*)
-            Capability.call_for_unit_exn tx method_id req)
-
-      let remove tx key =
-        let open Raw.Client.Tx.Remove in
-        log_key (module Store) "Tx.remove" key;
-        let req, p = Capability.Request.create Params.init_pointer in
-        Codec.Key.encode key |> Params.key_set p;
-        (*Capability.with_ref tx (fun tx ->*)
-        Capability.call_for_unit_exn tx method_id req
-
-      let tree tx =
-        let open Raw.Client.Tx.Tree in
-        Logs.info (fun l -> l "Tx.tree");
-        let req = Capability.Request.create_no_args () in
-        (*Capability.with_ref tx (fun tx ->*)
-        Lwt.wrap (fun () ->
-            Capability.call_for_caps tx method_id req Results.tree_get_pipelined)
-
-      let v repo tree =
-        let open Raw.Client.Repo.Tx in
-        Logs.info (fun l -> l "Tx.v");
-        let req, p = Capability.Request.create Params.init_pointer in
-        Params.tree_set p (Some tree);
-        Lwt.wrap (fun () ->
-            Capability.call_for_caps repo method_id req Results.tx_get_pipelined)
-    end
-
     module St = Store
 
     module Store = struct
@@ -558,6 +502,66 @@ functor
             in
             let+ ok = Commit.check cap in
             if ok then Some cap else None)
+    end
+
+    module Tx = struct
+      type t = tx
+
+      let add tx key value =
+        let open Raw.Client.Tx.Add in
+        (*Logs.info (fun l -> l "Tx.add");*)
+        let req, p = Capability.Request.create Params.init_pointer in
+        Params.key_set p (Codec.Key.encode key);
+        Params.contents_set p (Codec.Contents.encode value);
+        (*Capability.with_ref tx (fun tx ->*)
+        Capability.call_for_unit_exn tx method_id req
+
+      let add_contents tx key value =
+        let open Raw.Client.Tx.AddContents in
+        (*Logs.info (fun l -> l "Tx.add");*)
+        let req, p = Capability.Request.create Params.init_pointer in
+        Params.key_set p (Codec.Key.encode key);
+        Params.hash_set p (Codec.Hash.encode value);
+        (*Capability.with_ref tx (fun tx ->*)
+        Capability.call_for_unit_exn tx method_id req
+
+      let add_tree tx key value =
+        let open Raw.Client.Tx.AddTree in
+        Logs.info (fun l -> l "Tx.add_tree");
+        let req, p = Capability.Request.create Params.init_pointer in
+        Params.key_set p (Codec.Key.encode key);
+        Capability.with_ref value (fun value ->
+            Params.tree_set p (Some value);
+            (*Capability.with_ref tx (fun tx ->*)
+            Capability.call_for_unit_exn tx method_id req)
+
+      let remove tx key =
+        let open Raw.Client.Tx.Remove in
+        log_key (module St) "Tx.remove" key;
+        let req, p = Capability.Request.create Params.init_pointer in
+        Codec.Key.encode key |> Params.key_set p;
+        (*Capability.with_ref tx (fun tx ->*)
+        Capability.call_for_unit_exn tx method_id req
+
+      let tree tx =
+        let open Raw.Client.Tx.Tree in
+        Logs.info (fun l -> l "Tx.tree");
+        let req = Capability.Request.create_no_args () in
+        (*Capability.with_ref tx (fun tx ->*)
+        Lwt.wrap (fun () ->
+            Capability.call_for_caps tx method_id req Results.tree_get_pipelined)
+
+      let v repo tree =
+        let open Raw.Client.Repo.Tx in
+        Logs.info (fun l -> l "Tx.v");
+        let req, p = Capability.Request.create Params.init_pointer in
+        Params.tree_set p (Some tree);
+        Lwt.wrap (fun () ->
+            Capability.call_for_caps repo method_id req Results.tx_get_pipelined)
+
+      let commit tx store ~info key : unit Lwt.t =
+        let* tree = tree tx in
+        Store.set_tree ~info store key tree
     end
 
     module Pack = struct
