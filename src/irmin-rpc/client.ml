@@ -66,17 +66,19 @@ functor
         Capability.with_ref tree (fun tree ->
             Params.tree_set p (Some tree);
             Lwt.wrap (fun () ->
-                Capability.call_for_caps repo method_id req
-                  Results.commit_get_pipelined))
+                let x =
+                  Capability.call_for_caps repo method_id req
+                    Results.commit_get_pipelined
+                in
+                x))
 
       let check commit =
         let open Raw.Client.Commit.Check in
         Logs.info (fun l -> l "Commit.check");
         let req = Capability.Request.create_no_args () in
-        Capability.with_ref commit (fun commit ->
-            Capability.call_for_value commit method_id req >|= function
-            | Ok res -> Results.bool_get res
-            | _ -> false)
+        Capability.call_for_value commit method_id req >|= function
+        | Ok res -> Results.bool_get res
+        | _ -> false
 
       let of_hash repo hash : commit option Lwt.t =
         let open Raw.Client.Repo.CommitOfHash in
@@ -116,9 +118,10 @@ functor
         let open Raw.Client.Commit.Tree in
         Logs.info (fun l -> l "Commit.tree");
         let req = Capability.Request.create_no_args () in
-        Lwt.wrap (fun () ->
-            Capability.call_for_caps commit method_id req
-              Results.tree_get_pipelined)
+        Capability.with_ref commit (fun commit ->
+            Lwt.wrap (fun () ->
+                Capability.call_for_caps commit method_id req
+                  Results.tree_get_pipelined))
 
       let parents commit =
         let open Raw.Client.Commit.Parents in
@@ -197,7 +200,6 @@ functor
         let open Raw.Client.Tree.Check in
         Logs.info (fun l -> l "Tree.check");
         let req = Capability.Request.create_no_args () in
-        (*Capability.with_ref tree (fun tree ->*)
         Capability.call_for_value tree method_id req >|= function
         | Ok res -> Results.bool_get res
         | _ -> false
@@ -555,13 +557,19 @@ functor
         let open Raw.Client.Repo.Tx in
         Logs.info (fun l -> l "Tx.v");
         let req, p = Capability.Request.create Params.init_pointer in
-        Params.tree_set p (Some tree);
-        Lwt.wrap (fun () ->
-            Capability.call_for_caps repo method_id req Results.tx_get_pipelined)
+        Capability.with_ref tree (fun tree ->
+            Params.tree_set p (Some tree);
+            Lwt.wrap (fun () ->
+                Capability.call_for_caps repo method_id req
+                  Results.tx_get_pipelined))
 
       let commit tx store ~info key : unit Lwt.t =
         let* tree = tree tx in
-        Store.set_tree ~info store key tree
+        let+ x = Store.set_tree ~info store key tree in
+        Capability.dec_ref tx;
+        x
+
+      let abort tx = Capability.dec_ref tx
     end
 
     module Pack = struct
@@ -596,7 +604,10 @@ functor
         let open Raw.Client.Repo.BranchList in
         Logs.info (fun l -> l "Branch.list");
         let req = Capability.Request.create_no_args () in
-        let+ res = Capability.call_for_value_exn t method_id req in
+        let+ res =
+          Capability.with_ref t (fun t ->
+              Capability.call_for_value_exn t method_id req)
+        in
         Results.branches_get_list res |> List.map (Codec.Branch.decode >> unwrap)
 
       let remove t branch =
@@ -605,7 +616,8 @@ functor
             l "Branch.remove: %a" (Irmin.Type.pp St.Branch.t) branch);
         let req, p = Capability.Request.create Params.init_pointer in
         branch |> Codec.Branch.encode |> Params.branch_set p;
-        Capability.call_for_unit_exn t method_id req
+        Capability.with_ref t (fun t ->
+            Capability.call_for_unit_exn t method_id req)
 
       let set t branch commit =
         let open Raw.Client.Repo.BranchSet in
@@ -614,7 +626,19 @@ functor
         let req, p = Capability.Request.create Params.init_pointer in
         branch |> Codec.Branch.encode |> Params.branch_set p;
         Params.commit_set p (Some commit);
-        Capability.call_for_unit_exn t method_id req
+        Capability.with_ref t (fun t ->
+            Capability.call_for_unit_exn t method_id req)
+
+      let get t branch =
+        let open Raw.Client.Repo.BranchHead in
+        Logs.info (fun l ->
+            l "Branch.get: %a" (Irmin.Type.pp St.Branch.t) branch);
+        let req, p = Capability.Request.create Params.init_pointer in
+        branch |> Codec.Branch.encode |> Params.branch_set p;
+        Capability.with_ref t (fun t ->
+            Capability.call_for_caps t method_id req
+              Results.commit_get_pipelined
+            |> Lwt.return)
     end
 
     module Contents = struct

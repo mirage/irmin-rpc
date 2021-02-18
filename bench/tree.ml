@@ -209,7 +209,7 @@ struct
 
   let init_commit repo =
     let* tree = Rpc.Client.Tree.empty repo in
-    Logs.info (fun l -> l "AAA");
+    Logs.info (fun l -> l "init_commit");
     Rpc.Client.Commit.v repo ~info ~parents:[] tree
 
   let checkout_and_commit repo prev_commit f =
@@ -221,7 +221,7 @@ struct
         let* tx = Rpc.Client.Tx.v repo tree in
         let* tx = f tx in
         let* tree = Rpc.Client.Tx.tree tx in
-        Logs.info (fun l -> l "BBB");
+        Logs.info (fun l -> l "Checkout_and_commit");
         Rpc.Client.Commit.v repo ~info ~parents:[ prev_commit ] tree
 
   let add_commits repo ncommits f () : unit Lwt.t =

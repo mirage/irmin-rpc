@@ -988,7 +988,24 @@ functor
                 in
                 let tx = Tx.local client repo tree in
                 Results.tx_set results (Some tx);
+                Capability.dec_ref tx;
                 Lwt.return_ok ())
+
+          method branch_head_impl params release_param_caps =
+            let open Repo.BranchHead in
+            let branch = Params.branch_get params in
+            release_param_caps ();
+            Logs.info (fun l -> l "Repo.branch_head");
+            with_initialised_results
+              (module Results)
+              (fun results ->
+                let+ branch =
+                  St.Branch.get repo
+                    (Codec.Branch.decode branch |> Result.get_ok)
+                in
+                let cap = Commit.local repo branch in
+                Results.commit_set results (Some cap);
+                Ok ())
         end
         |> Repo.local
     end

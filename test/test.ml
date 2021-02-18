@@ -212,6 +212,23 @@ module Test_store = struct
       "test and set tree, value from store" None v;
     Lwt.return ()
 
+  let test_tx { server = _; client } =
+    let err =
+      "Attempt to change ref-count (to rc=0-1) on freed resource Tx(rc=0)"
+    in
+    let info () = Faker.info () in
+    let* master = Client.Store.master client in
+    let* tree = Client.Tree.empty client in
+    let* tx = Client.Tx.v client tree in
+    let* () = Client.Tx.commit tx master [] ~info in
+    Alcotest.check_raises "abort fails after commit" (Failure err) (fun () ->
+        Client.Tx.abort tx);
+    let* tx = Client.Tx.v client tree in
+    Client.Tx.abort tx;
+    Alcotest.check_raises "abort fails second time" (Failure err) (fun () ->
+        Client.Tx.abort tx);
+    Lwt.return_unit
+
   let suite =
     [
       test_case "master" test_master;
@@ -223,6 +240,7 @@ module Test_store = struct
       test_case "tree" test_tree;
       test_case "test_and_set" test_test_and_set;
       test_case "test_and_set_tree" test_test_and_set_tree;
+      test_case "test_tx" test_tx;
     ]
 end
 

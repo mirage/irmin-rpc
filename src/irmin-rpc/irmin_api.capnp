@@ -8,6 +8,7 @@ using Contents = Data;
 using Endpoint = Data;
 using Key = Data;
 using Step = Data;
+using Branch = Text;
 
 # Irmin.info
 struct Info {
@@ -193,13 +194,13 @@ interface Repo {
   ofBranch  @1  (branch :Text) -> (store :Store);
 
   # List all branches
-  branchList    @2  () -> (branches :List(Text));
+  branchList    @2  () -> (branches :List(Branch));
 
   # Remove a branch
-  branchRemove  @3  (branch :Text) -> ();
+  branchRemove  @3  (branch :Branch) -> ();
 
   # Create a new branch using the given branch name and `commit`
-  branchSet     @4  (branch :Text, commit :Commit) -> ();
+  branchSet     @4  (branch :Branch, commit :Commit) -> ();
 
   # Find commit for `hash`
   commitOfHash   @5  (hash :Hash) -> (commit :Commit);
@@ -220,6 +221,8 @@ interface Repo {
   treeOfConcrete @10 (concrete :Tree.Concrete) -> (tree :Tree);
 
   tx @11 (tree :Tree) -> (tx :Tx);
+
+  branchHead @12 (branch :Branch) -> (commit :Commit);
 }
 
 # The top-level interface of an RPC server

@@ -113,6 +113,9 @@ module type S = sig
   module Branch : sig
     include Irmin.Branch.S with type t = branch
 
+    val get : repo -> branch -> commit Lwt.t
+    (** Get branch head *)
+
     val list : repo -> branch list Lwt.t
     (** List all branches *)
 
@@ -240,6 +243,9 @@ module type S = sig
 
     val commit : tx -> store -> info:Irmin.Info.f -> key -> unit Lwt.t
     (** Commit transaction *)
+
+    val abort : tx -> unit
+    (** Abort transaction *)
   end
 
   module Contents : sig
