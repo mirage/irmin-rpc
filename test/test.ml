@@ -104,13 +104,13 @@ module Test_store = struct
     let* master = client |> Store.master in
     let* () =
       Client.Store.find_tree master [ "k" ]
-      >>= Option.map_lwt Client.Tree.concrete
+      >>= Option.map_lwt Client.Tree.to_concrete
       >>= Option.map_lwt (resolve_tree server)
       >|= Alcotest.(check find_tree) "Binding [k → Some tree]" (Some tree)
     in
     let* () =
       Client.Store.find_tree master [ "k_absent" ]
-      >>= Option.map_lwt Client.Tree.concrete
+      >>= Option.map_lwt Client.Tree.to_concrete
       >>= Option.map_lwt (resolve_tree server)
       >|= Alcotest.(check find_tree) "Binding [k_absent → Some tree]" None
     in
@@ -147,7 +147,7 @@ module Test_store = struct
     let* () = Client.Tx.remove tx [ "b" ] in
     let* () = Client.Tx.commit tx master [ "tree" ] ~info in
     let* tree = Client.Store.get_tree master [ "tree" ] in
-    let* tree = Client.Tree.concrete tree >>= resolve_tree server in
+    let* tree = Client.Tree.to_concrete tree >>= resolve_tree server in
     let* master = Server.master server in
     let* () =
       Server.find_tree master [ "tree" ]

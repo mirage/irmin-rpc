@@ -28,7 +28,7 @@ let main =
   let* tree = Client.Store.find_tree master [ "abc" ] in
   let* concrete =
     match tree with
-    | Some c -> Client.Tree.concrete c >>= Lwt.return_some
+    | Some c -> Client.Tree.to_concrete c >>= Lwt.return_some
     | None -> Lwt.return_none
   in
   assert (match concrete with Some (`Contents _) -> true | _ -> false);

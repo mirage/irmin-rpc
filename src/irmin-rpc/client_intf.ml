@@ -25,6 +25,9 @@ module type S = sig
   include module type of Types
   (** @inline *)
 
+  type metadata
+  (** Metadata type, inherited from the underlying Irmin store *)
+
   type branch
   (** Branch type, inherited from the underlying Irmin store *)
 
@@ -207,7 +210,7 @@ module type S = sig
     val mem_tree : tree -> key -> bool Lwt.t
     (** Check if a subtree exists at the given key *)
 
-    val concrete : tree -> concrete Lwt.t
+    val to_concrete : tree -> concrete Lwt.t
     (** Return a concrete representation of a tree *)
 
     val of_concrete : repo -> concrete -> tree Lwt.t
@@ -217,6 +220,46 @@ module type S = sig
     (** Get hash of contents at the given key *)
 
     val list : tree -> key -> step list Lwt.t
+
+    module Local : sig
+      type t
+
+      val t : t Irmin.Type.t
+
+      val empty : t
+
+      val of_contents : contents -> t
+
+      val add : t -> key -> contents -> t Lwt.t
+
+      val add_tree : t -> key -> t -> t Lwt.t
+
+      val find : t -> key -> contents option Lwt.t
+
+      val find_tree : t -> key -> t option Lwt.t
+
+      val remove : t -> key -> t Lwt.t
+
+      val mem : t -> key -> bool Lwt.t
+
+      val mem_tree : t -> key -> bool Lwt.t
+
+      val update : t -> key -> (contents option -> contents option) -> t Lwt.t
+
+      val update_tree : t -> key -> (t option -> t option) -> t Lwt.t
+
+      val kind : t -> key -> [ `Contents | `Node ] option Lwt.t
+
+      val destruct : t -> [ `Contents of hash | `Node of (step * t) list ] Lwt.t
+
+      val of_concrete : repo -> concrete -> t Lwt.t
+
+      val to_concrete : repo -> t -> concrete Lwt.t
+
+      val to_tree : repo -> t -> tree Lwt.t
+
+      val of_tree : repo -> tree -> t Lwt.t
+    end
   end
 
   module Tx : sig
@@ -251,16 +294,15 @@ module type S = sig
   module Contents : sig
     include Irmin.Contents.S with type t = contents
 
-    val import : repo -> contents list -> hash list Lwt.t
+    val import : repo -> contents -> hash Lwt.t
+    (** import contents to the repo *)
+
+    val bulk_import : repo -> contents list -> hash list Lwt.t
     (** import contents to the repo, returning a hash for each item *)
 
     val of_hash : repo -> hash -> contents option Lwt.t
     (** Get hash from contents, this function uses caching to avoid calling to
         the server for every request *)
-
-    val find : store -> key -> (repo -> contents Lwt.t) option Lwt.t
-    (** Returns a function that returns the contents associated with the
-        specified key, if available *)
   end
 
   val repo : t -> repo Lwt.t
@@ -284,6 +326,7 @@ module type MAKER = functor
      and type step = Store.Key.step
      and module Key = Store.Key
      and module Hash = Store.Hash
+     and type metadata = Store.metadata
 
 module type Client = sig
   module type S = S

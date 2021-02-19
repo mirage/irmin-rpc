@@ -30,6 +30,8 @@ functor
 
     type t = Raw.Client.Irmin.t Capability.t
 
+    type metadata = Store.metadata
+
     type branch = Store.branch
 
     type key = Store.key
@@ -185,6 +187,60 @@ functor
         decode_push_result x
     end
 
+    module St = Store
+
+    module Contents = struct
+      include St.Contents
+
+      module Cache = Irmin.Private.Lru.Make (struct
+        type t = hash
+
+        let equal a b = Irmin.Type.unstage (Irmin.Type.equal St.Hash.t) a b
+
+        let hash = St.Hash.short_hash
+      end)
+
+      let cache = Cache.create 16
+
+      let of_hash repo hash =
+        let open Raw.Client.Repo.ContentsOfHash in
+        Logs.info (fun l -> l "Contents.of_hash");
+        if Cache.mem cache hash then Lwt.return_some (Cache.find cache hash)
+        else
+          let req, p = Capability.Request.create Params.init_pointer in
+          let () = Params.hash_set p (Codec.Hash.encode hash) in
+          let+ x = Capability.call_for_value_exn repo method_id req in
+          if Results.has_contents x then
+            let c = Results.contents_get x in
+            let c = Codec.Contents.decode c |> unwrap in
+            let () = Cache.add cache hash c in
+            Some c
+          else None
+
+      let bulk_import repo (contents : contents list) =
+        let open Raw.Client.Repo.ImportContents in
+        Logs.info (fun l -> l "Contents.bulk_import");
+        let req, p = Capability.Request.create Params.init_pointer in
+        let _ =
+          Params.values_set_list p (List.map Codec.Contents.encode contents)
+        in
+        let+ x = Capability.call_for_value_exn repo method_id req in
+        List.map
+          (fun x -> Codec.Hash.decode x |> unwrap)
+          (Results.hash_get_list x)
+
+      let import repo (contents : contents) : hash Lwt.t =
+        let hash = St.Contents.hash contents in
+        if Cache.mem cache hash then Lwt.return hash
+        else
+          let open Raw.Client.Repo.ImportContents in
+          (*Logs.info (fun l -> l "Contents.import");*)
+          let req, p = Capability.Request.create Params.init_pointer in
+          let _ = Params.values_set_list p [ Codec.Contents.encode contents ] in
+          let+ x = Capability.call_for_value_exn repo method_id req in
+          List.hd (Results.hash_get_list x) |> Codec.Hash.decode |> unwrap
+    end
+
     module Tree = struct
       type t = tree
 
@@ -213,9 +269,7 @@ functor
         Logs.info (fun l -> l "Tree.find");
         let req, p = Capability.Request.create Params.init_pointer in
         Params.key_set p (Codec.Key.encode key);
-        let+ x =
-          Capability.call_for_value_exn tree method_id req
-        in
+        let+ x = Capability.call_for_value_exn tree method_id req in
         if Results.has_contents x then
           Some (Results.contents_get x |> Codec.Contents.decode |> unwrap)
         else None
@@ -252,16 +306,17 @@ functor
         Logs.info (fun l -> l "Tree.mem_tree");
         let req, p = Capability.Request.create Params.init_pointer in
         Params.key_set p (Codec.Key.encode key);
-        let+ x =
-          Capability.call_for_value_exn tree method_id req
-        in
+        let+ x = Capability.call_for_value_exn tree method_id req in
         Results.exists_get x
 
-      let concrete tree =
+      let to_concrete tree =
         let open Raw.Client.Tree.GetConcrete in
-        Logs.info (fun l -> l "Tree.concrete");
+        Logs.info (fun l -> l "Tree.to_concrete");
         let req = Capability.Request.create_no_args () in
-        let+ x = Capability.call_for_value_exn tree method_id req in
+        let+ x =
+          Capability.with_ref tree (fun tree ->
+          Capability.call_for_value_exn tree method_id req)
+        in
         let concrete = Results.concrete_get x in
         Codec.Tree.decode concrete
 
@@ -280,9 +335,7 @@ functor
         log_key (module Store) "Tree.find_hash" key;
         let req, p = Capability.Request.create Params.init_pointer in
         Codec.Key.encode key |> Params.key_set p;
-        let+ res =
-          Capability.call_for_value_exn t method_id req
-        in
+        let+ res = Capability.call_for_value_exn t method_id req in
         match Results.has_hash res with
         | true -> Some (Results.hash_get res |> Codec.Hash.decode |> unwrap)
         | false -> None
@@ -292,14 +345,92 @@ functor
         log_key (module Store) "Tree.list" key;
         let req, p = Capability.Request.create Params.init_pointer in
         Codec.Key.encode key |> Params.key_set p;
-        let+ res =
-          Capability.call_for_value_exn t method_id req
-        in
+        let+ res = Capability.call_for_value_exn t method_id req in
         let l = Results.items_get_list res in
         List.map (fun x -> Codec.Key.Step.decode x |> unwrap) l
-    end
 
-    module St = Store
+      module Local = struct
+        type t = St.tree
+
+        let t = St.tree_t
+
+        let empty = St.Tree.empty
+
+        let list = St.Tree.list
+
+        let of_contents x = St.Tree.of_contents x
+
+        let add t key contents = St.Tree.add t key contents
+
+        let add_tree t key tree = St.Tree.add_tree t key tree
+
+        let mem = St.Tree.mem
+
+        let mem_tree = St.Tree.mem_tree
+
+        let update = St.Tree.update ~metadata:St.Metadata.default
+
+        let update_tree = St.Tree.update_tree
+
+        let remove = St.Tree.remove
+
+        let find = St.Tree.find
+
+        let find_tree = St.Tree.find_tree
+
+        let destruct x =
+          match St.Tree.destruct x with
+          | `Contents (x, _) -> Lwt.return (`Contents (St.Tree.Contents.hash x))
+          | `Node l ->
+              let+ l = list (St.Tree.of_node l) St.Key.empty in
+              `Node l
+
+        let kind = St.Tree.kind
+
+        let to_concrete' = to_concrete
+
+        let rec to_concrete repo x =
+          match St.Tree.destruct x with
+          | `Contents (s, _) ->
+              let hash = St.Tree.Contents.hash s in
+              if Contents.Cache.mem Contents.cache hash then
+                Lwt.return (`Contents hash)
+              else
+                let* s = St.Tree.Contents.force_exn s in
+                let+ hash = Contents.import repo s in
+                `Contents hash
+          | `Node l ->
+              let* l = St.Tree.list (St.Tree.of_node l) St.Key.empty in
+              let+ l =
+                Lwt_list.map_s
+                  (fun (step, local) ->
+                    let+ local = to_concrete repo local in
+                    (step, local))
+                  l
+              in
+              `Tree l
+
+        let to_tree repo x =
+          let* x = to_concrete repo x in
+          of_concrete repo x
+
+        let rec of_concrete repo = function
+          | `Contents hash ->
+              let+ contents = Contents.of_hash repo hash in
+              St.Tree.of_contents (Option.get contents)
+          | `Tree l ->
+              let x = St.Tree.empty in
+              Lwt_list.fold_left_s
+                (fun acc (step, t) ->
+                  let* t = of_concrete repo t in
+                  St.Tree.add_tree acc (St.Key.v [ step ]) t)
+                x l
+
+        let of_tree (repo : repo) (tree : tree) =
+          let* c = to_concrete' tree in
+          of_concrete repo c
+      end
+    end
 
     module Store = struct
       type t = store
@@ -325,9 +456,7 @@ functor
         log_key (module Store) "Store.find" key;
         let req, p = Capability.Request.create Params.init_pointer in
         Codec.Key.encode key |> Params.key_set p;
-        let+ res =
-          Capability.call_for_value_exn t method_id req
-        in
+        let+ res = Capability.call_for_value_exn t method_id req in
         match Results.has_contents res with
         | true ->
             Result.map Option.some
@@ -365,9 +494,7 @@ functor
         log_key (module Store) "Store.find_hash" key;
         let req, p = Capability.Request.create Params.init_pointer in
         Codec.Key.encode key |> Params.key_set p;
-        let+ res =
-          Capability.call_for_value_exn t method_id req
-        in
+        let+ res = Capability.call_for_value_exn t method_id req in
         match Results.has_hash res with
         | true -> Some (Results.hash_get res |> Codec.Hash.decode |> unwrap)
         | false -> None
@@ -446,9 +573,7 @@ functor
         let (_ : Raw.Builder.Info.t) =
           info () |> Codec.Info.encode |> Params.info_set_builder p
         in
-        let+ res =
-          Capability.call_for_value_exn t method_id req
-        in
+        let+ res = Capability.call_for_value_exn t method_id req in
         Results.result_get res |> Codec.Merge_result.decode |> unwrap
 
       let sync t =
@@ -562,9 +687,7 @@ functor
         let req, p = Capability.Request.create Params.init_pointer in
         Params.auto_repair_set p auto_repair;
         Params.pack_set p (Some t);
-        let* x =
-          Capability.call_for_value_exn t method_id req
-        in
+        let* x = Capability.call_for_value_exn t method_id req in
         let results = Results.result_get x in
         Lwt.return
         @@
@@ -612,57 +735,6 @@ functor
         branch |> Codec.Branch.encode |> Params.branch_set p;
         Capability.call_for_caps t method_id req Results.commit_get_pipelined
         |> Lwt.return
-    end
-
-    module Contents = struct
-      include St.Contents
-
-      module Cache = Irmin.Private.Lru.Make (struct
-        type t = hash
-
-        let equal a b = Irmin.Type.unstage (Irmin.Type.equal St.Hash.t) a b
-
-        let hash = St.Hash.short_hash
-      end)
-
-      let cache = Cache.create 16
-
-      let of_hash repo hash =
-        let open Raw.Client.Repo.ContentsOfHash in
-        Logs.info (fun l -> l "Contents.of_hash");
-        if Cache.mem cache hash then Lwt.return_some (Cache.find cache hash)
-        else
-          let req, p = Capability.Request.create Params.init_pointer in
-          let () = Params.hash_set p (Codec.Hash.encode hash) in
-          let+ x = Capability.call_for_value_exn repo method_id req in
-          if Results.has_contents x then
-            let c = Results.contents_get x in
-            let c = Codec.Contents.decode c |> unwrap in
-            let () = Cache.add cache hash c in
-            Some c
-          else None
-
-      let find store key =
-        let+ hash = Store.find_hash store key in
-        match hash with
-        | None -> None
-        | Some x ->
-            Some
-              (fun repo ->
-                let+ x = of_hash repo x in
-                Option.get x)
-
-      let import repo contents =
-        let open Raw.Client.Repo.ImportContents in
-        Logs.info (fun l -> l "Contents.import");
-        let req, p = Capability.Request.create Params.init_pointer in
-        let _ =
-          Params.values_set_list p (List.map Codec.Contents.encode contents)
-        in
-        let+ x = Capability.call_for_value_exn repo method_id req in
-        List.map
-          (fun x -> Codec.Hash.decode x |> unwrap)
-          (Results.hash_get_list x)
     end
 
     let repo t =

@@ -42,6 +42,7 @@ module Make
          and type hash = Store.hash
          and type branch = Store.branch
          and type contents = Store.contents
+         and type metadata = Store.metadata
 
     val connect : Uri.t -> t Lwt.t
   end
