@@ -327,6 +327,7 @@ module type MAKER = functor
      and module Key = Store.Key
      and module Hash = Store.Hash
      and type metadata = Store.metadata
+     and type Tree.Local.t = Store.tree
 
 module type Client = sig
   module type S = S

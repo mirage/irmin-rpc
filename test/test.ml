@@ -229,6 +229,21 @@ module Test_store = struct
         Client.Tx.abort tx);
     Lwt.return_unit
 
+  let test_local_tree { server; client } =
+    let info () = Faker.info () in
+
+    let* master = Client.Store.master client in
+    let tree = Client.Tree.Local.empty in
+    let* tree = Client.Tree.Local.add tree [ "foo" ] "bar" in
+    let* tree = Client.Tree.Local.add tree [ "a"; "b"; "c" ] "123" in
+    let* x = Client.Tree.Local.to_tree client tree in
+    let* () = Client.Store.set_tree master ~info [ "local" ] x in
+    let* master = Server.master server in
+    let* tree' = Server.get_tree master [ "local" ] in
+    let* diff = Server.Tree.diff tree tree' in
+    Alcotest.(check int) "trees equal" 0 (List.length diff);
+    Lwt.return_unit
+
   let suite =
     [
       test_case "master" test_master;
@@ -241,6 +256,7 @@ module Test_store = struct
       test_case "test_and_set" test_test_and_set;
       test_case "test_and_set_tree" test_test_and_set_tree;
       test_case "test_tx" test_tx;
+      test_case "test_local_tree" test_local_tree;
     ]
 end
 

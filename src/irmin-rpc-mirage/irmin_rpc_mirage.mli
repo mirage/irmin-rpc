@@ -33,11 +33,14 @@ module Make
       Irmin_rpc.Client.S
         with type branch = Store.branch
          and type key = Store.key
-         and type step = Store.Key.step
          and type contents = Store.contents
          and type hash = Store.hash
+         and type Sync.endpoint = Remote.t
+         and type step = Store.Key.step
          and module Key = Store.Key
          and module Hash = Store.Hash
+         and type metadata = Store.metadata
+         and type Tree.Local.t = Store.tree
 
     val connect : Stack.t -> Uri.t -> t Lwt.t
   end
