@@ -33,6 +33,7 @@ let main =
   assert (Option.get z = "999");
 
   let* () = Client.Tx.remove tx [ "a" ] in
+
   let* () = Client.Tx.commit tx master ~info [] in
   let* a = Client.Store.find master [ "a" ] in
   assert (Result.get_ok a = None);

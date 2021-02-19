@@ -923,7 +923,6 @@ functor
             with_initialised_results
               (module Results)
               (fun results ->
-                Logs.info (fun l -> l "XXX");
                 let parents =
                   List.map (fun x -> Codec.Hash.decode x |> unwrap) parents
                 in
@@ -1005,6 +1004,7 @@ functor
                 in
                 let cap = Commit.local repo branch in
                 Results.commit_set results (Some cap);
+                Capability.dec_ref cap;
                 Ok ())
         end
         |> Repo.local
