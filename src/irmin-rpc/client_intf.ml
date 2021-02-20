@@ -221,6 +221,8 @@ module type S = sig
 
     val list : tree -> key -> step list Lwt.t
 
+    val equal : tree -> tree -> bool Lwt.t
+
     module Local : sig
       type t
 

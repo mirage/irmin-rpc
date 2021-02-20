@@ -215,6 +215,19 @@ functor
               (fun results ->
                 Results.bool_set results true;
                 Lwt.return_ok ())
+
+          method equal_impl params release_param_caps =
+            let open Tree.Equal in
+            let other = Params.other_get params in
+            release_param_caps ();
+            Logs.info (fun f -> f "Tree.equal");
+            with_initialised_results
+              (module Results)
+              (fun results ->
+                let other = Hashtbl.find trees (Option.get other) in
+                let q = Irmin.Type.(unstage @@ equal St.tree_t) tree other in
+                Results.equal_set results q;
+                Lwt.return_ok ())
         end
         |> Tree.local
 

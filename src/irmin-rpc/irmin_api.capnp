@@ -59,6 +59,8 @@ interface Tree {
 
   # Check if tree exists
   check       @8 () -> (bool :Bool);
+
+  equal @9 (other :Tree) -> (equal :Bool);
 }
 
 # Writeable trees

@@ -286,7 +286,7 @@ let suite : suite_elt list =
       };*)
     {
       mode = `Large;
-      speed = `Quick;
+      speed = `Slow;
       inode_config = `Entries_32;
       run = Bench_inodes_32.run ~mode:`Large;
     };

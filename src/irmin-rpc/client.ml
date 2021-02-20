@@ -315,7 +315,7 @@ functor
         let req = Capability.Request.create_no_args () in
         let+ x =
           Capability.with_ref tree (fun tree ->
-          Capability.call_for_value_exn tree method_id req)
+              Capability.call_for_value_exn tree method_id req)
         in
         let concrete = Results.concrete_get x in
         Codec.Tree.decode concrete
@@ -348,6 +348,14 @@ functor
         let+ res = Capability.call_for_value_exn t method_id req in
         let l = Results.items_get_list res in
         List.map (fun x -> Codec.Key.Step.decode x |> unwrap) l
+
+      let equal a b =
+        let open Raw.Client.Tree.Equal in
+        Logs.info (fun l -> l "Tree.equal");
+        let req, p = Capability.Request.create Params.init_pointer in
+        Params.other_set p (Some b);
+        let+ res = Capability.call_for_value_exn a method_id req in
+        Results.equal_get res
 
       module Local = struct
         type t = St.tree
