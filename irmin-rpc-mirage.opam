@@ -36,4 +36,5 @@ pin-depends: [
   ["ppx_irmin.dev" "git+https://github.com/mirage/irmin#806315563437cb8d77e32f75daee1408f32b2bda"]
   ["irmin.dev" "git+https://github.com/mirage/irmin#806315563437cb8d77e32f75daee1408f32b2bda"]
   ["irmin-mirage.dev" "git+https://github.com/mirage/irmin#806315563437cb8d77e32f75daee1408f32b2bda"]
+  ["irmin-mirage-git.dev" "git+https://github.com/mirage/irmin#806315563437cb8d77e32f75daee1408f32b2bda"]
 ]
