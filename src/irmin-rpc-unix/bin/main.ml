@@ -5,9 +5,10 @@ let () =
   Logs.set_level (Some Logs.App);
   Logs.set_reporter (Logs_fmt.reporter ())
 
-let config path =
-  let head = Git.Reference.of_string "refs/heads/master" |> Result.get_ok in
-  Irmin_git.config ~head path
+let http_server (type x) (module Store : Irmin.S with type repo = x) (_repo : x)
+    _conn _req body =
+  Cohttp_lwt.Body.drain_body body >>= fun () ->
+  Cohttp_lwt_unix.Server.respond_string ~body:"OK" ~status:`OK ()
 
 let run (Irmin_unix.Resolver.S ((module Store), store, _)) host port secret_key
     address_file insecure max_tx =
@@ -36,7 +37,12 @@ let run (Irmin_unix.Resolver.S ((module Store), store, _)) host port secret_key
       | None ->
           Logs.app (fun l -> l "%s" (Uri.to_string (Rpc.Server.uri server)))
     in
-    fst (Lwt.wait ())
+    let http =
+      Cohttp_lwt_unix.Server.make
+        ~callback:(http_server (module Store) (Store.repo store))
+        ()
+    in
+    Cohttp_lwt_unix.Server.create ~mode:(`TCP (`Port (port + 1))) http
   in
   Lwt_main.run p
 

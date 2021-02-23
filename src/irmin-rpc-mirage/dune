@@ -2,5 +2,5 @@
  (name irmin_rpc_mirage)
  (public_name irmin-rpc-mirage)
  (libraries irmin irmin-mirage-git irmin-rpc capnp-rpc-mirage capnp-rpc-net
-   capnp-rpc-lwt  mirage-time dns-client dns-client.mirage
-   mirage-random mirage-clock mirage-stack lwt uri))
+   capnp-rpc-lwt mirage-time dns-client dns-client.mirage mirage-random
+   mirage-clock mirage-stack lwt uri))

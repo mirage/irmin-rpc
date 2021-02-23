@@ -12,6 +12,5 @@
  (package irmin-rpc-unix)
  (preprocess
   (pps ppx_deriving_yojson ppx_repr))
- (libraries irmin-rpc-unix lwt
-   unix cmdliner logs yojson ppx_deriving_yojson memtrace repr ppx_repr
-   bench_common))
+ (libraries irmin-rpc-unix lwt unix cmdliner logs yojson ppx_deriving_yojson
+   memtrace repr ppx_repr bench_common))
