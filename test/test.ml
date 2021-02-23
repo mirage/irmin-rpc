@@ -29,7 +29,7 @@ module Test_store = struct
 
   let ctx () =
     let+ server = Server.Repo.v (Irmin_mem.config ()) in
-    let ctx = RPC.Server.Context.empty () in
+    let ctx = RPC.Server.Client_context.empty ~max_tx:32 in
     let client = RPC.Server.Repo.local ctx server in
     { server; client }
 

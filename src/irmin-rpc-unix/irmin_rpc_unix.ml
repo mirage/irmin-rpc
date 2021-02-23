@@ -23,7 +23,7 @@ struct
 
     let uri { uri; _ } = uri
 
-    let serve ?backlog ?switch ?secure:serve_tls ~secret_key addr repo =
+    let serve ?max_tx ?backlog ?switch ?secure:serve_tls ~secret_key addr repo =
       let config =
         Capnp_rpc_unix.Vat_config.create ?backlog ~secret_key ?serve_tls addr
       in
@@ -32,7 +32,8 @@ struct
         | Some true | None -> Capnp_rpc_unix.Vat_config.derived_id config "main"
         | Some false -> Capnp_rpc_net.Restorer.Id.public ""
       in
-      let restore = Capnp_rpc_net.Restorer.single service_id (Api.local repo) in
+      let ctx = Api.ctx ?max_tx repo in
+      let restore = Capnp_rpc_net.Restorer.single service_id (Api.local ctx) in
       Capnp_rpc_unix.serve ?switch ~restore config >|= fun vat ->
       { uri = Capnp_rpc_unix.Vat.sturdy_uri vat service_id }
   end

@@ -13,6 +13,7 @@ module Make
     val uri : t -> Uri.t
 
     val serve :
+      ?max_tx:int ->
       ?backlog:int ->
       ?switch:Lwt_switch.t ->
       ?secure:bool ->

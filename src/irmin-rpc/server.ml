@@ -38,10 +38,17 @@ functor
   struct
     module P = Pack
 
-    module Context = struct
-      type t = { tx : (Raw.Client.Tx.t cap, St.tree ref) Hashtbl.t }
+    type ctx = { max_tx : int; repo : St.repo }
 
-      let empty () = { tx = Hashtbl.create 8 }
+    let ctx ?(max_tx = 32) repo = { max_tx; repo }
+
+    module Client_context = struct
+      type t = {
+        max_tx : int;
+        tx : (Raw.Client.Tx.t cap, St.tree ref) Hashtbl.t;
+      }
+
+      let empty ~max_tx = { max_tx; tx = Hashtbl.create 8 }
     end
 
     let remote =
@@ -327,18 +334,16 @@ functor
         end
         |> Tx.local
 
-      and tx_limit = 32
-
       and local client repo (tree : St.tree) : t =
-        (* TODO: make this limit configurable *)
-        if Hashtbl.length client.Context.tx > tx_limit then
-          failwith "Too many transactions"
+        if
+          Hashtbl.length client.Client_context.tx > client.Client_context.max_tx
+        then failwith "TX Too many transactions"
         else
           let r = ref tree in
           let x = local' client repo r in
-          Hashtbl.replace client.Context.tx x r;
+          Hashtbl.replace client.Client_context.tx x r;
           Capability.when_released x (fun () ->
-              Hashtbl.remove client.Context.tx x);
+              Hashtbl.remove client.Client_context.tx x);
           x
     end
 
@@ -1029,8 +1034,8 @@ functor
         inherit I.service
 
         val repo_service =
-          let client = Context.empty () in
-          Repo.local client ctx
+          let client = Client_context.empty ~max_tx:ctx.max_tx in
+          Repo.local client ctx.repo
 
         method repo_impl _params release_param_caps =
           let open I.Repo in

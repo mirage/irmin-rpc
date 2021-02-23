@@ -9,16 +9,20 @@ module type S = sig
 
   type hash
 
-  module Context : sig
+  type ctx = { max_tx : int; repo : repo }
+
+  val ctx : ?max_tx:int -> repo -> ctx
+
+  module Client_context : sig
     type t
 
-    val empty : unit -> t
+    val empty : max_tx:int -> t
   end
 
   module Commit : sig
     type t = Raw.Client.Commit.t cap
 
-    val local : Context.t -> commit -> t
+    val local : Client_context.t -> commit -> t
 
     val read :
       repo ->
@@ -29,16 +33,16 @@ module type S = sig
   module Store : sig
     type t = Raw.Client.Store.t cap
 
-    val local : Context.t -> store -> t
+    val local : Client_context.t -> store -> t
   end
 
   module Repo : sig
     type t = Raw.Client.Repo.t cap
 
-    val local : Context.t -> repo -> t
+    val local : Client_context.t -> repo -> t
   end
 
-  val local : repo -> Raw.Client.Irmin.t cap
+  val local : ctx -> Raw.Client.Irmin.t cap
 end
 
 module type MAKER = functor

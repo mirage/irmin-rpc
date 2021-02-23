@@ -17,7 +17,8 @@ struct
     module Rpc =
       Irmin_rpc.Make (Store) (Remote) (Irmin_rpc.Config.Pack.None (Store))
 
-    let serve ~secret_key ?switch ?serve_tls ?(port = 1111) stack ~addr repo =
+    let serve ?max_tx ~secret_key ?switch ?serve_tls ?(port = 1111) stack ~addr
+        repo =
       let dns = Dns.create stack in
       let net = Capnp_rpc_mirage.network ~dns stack in
       let public_address = `TCP (addr, port) in
@@ -31,8 +32,9 @@ struct
             Capnp_rpc_mirage.Vat_config.derived_id config "main"
         | Some false -> Capnp_rpc_net.Restorer.Id.public ""
       in
+      let ctx = Rpc.Server.ctx ?max_tx repo in
       let restore =
-        Capnp_rpc_net.Restorer.single service_id (Rpc.Server.local repo)
+        Capnp_rpc_net.Restorer.single service_id (Rpc.Server.local ctx)
       in
       Capnp_rpc_mirage.serve ?switch net config ~restore >|= fun vat ->
       Capnp_rpc_mirage.Vat.sturdy_uri vat service_id

@@ -10,7 +10,7 @@ let config path =
   Irmin_git.config ~head path
 
 let run (Irmin_unix.Resolver.S ((module Store), store, _)) host port secret_key
-    address_file insecure =
+    address_file insecure max_tx =
   let module Rpc =
     Irmin_rpc_unix.Make
       (Store)
@@ -23,7 +23,9 @@ let run (Irmin_unix.Resolver.S ((module Store), store, _)) host port secret_key
   let secure = not insecure in
   let p =
     store >>= fun store ->
-    Rpc.Server.serve ~secure ~secret_key (`TCP (host, port)) (Store.repo store)
+    Rpc.Server.serve ?max_tx ~secure ~secret_key
+      (`TCP (host, port))
+      (Store.repo store)
     >>= fun server ->
     let () =
       match address_file with
@@ -65,6 +67,10 @@ let insecure =
   let doc = "Disable SSL and other security features" in
   Arg.(value & flag & info [ "insecure" ] ~doc)
 
+let max_tx =
+  let doc = "Maximum number of open transactions per client" in
+  Arg.(value & opt (some int) None & info [ "x"; "max-tx" ] ~docv:"MAX" ~doc)
+
 let main_t =
   Term.(
     const run
@@ -73,6 +79,7 @@ let main_t =
     $ port
     $ secret_key
     $ address_file
-    $ insecure)
+    $ insecure
+    $ max_tx)
 
 let () = Term.exit @@ Term.eval (main_t, Term.info "irmin-rpc")

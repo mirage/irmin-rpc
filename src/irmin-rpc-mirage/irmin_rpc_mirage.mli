@@ -18,6 +18,7 @@ module Make
          and type hash = Store.hash
 
     val serve :
+      ?max_tx:int ->
       secret_key:[< `PEM of string | `Ephemeral ] ->
       ?switch:Lwt_switch.t ->
       ?serve_tls:bool ->
