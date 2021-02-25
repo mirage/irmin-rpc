@@ -186,7 +186,7 @@ module Benchmark = struct
       result.size
 end
 
-module Hash = Irmin.Hash.SHA1
+module Hash = Irmin.Hash.BLAKE2B
 
 module Bench_suite (Conf : sig
   val entries : int

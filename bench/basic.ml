@@ -4,7 +4,7 @@ module Store =
   Irmin_pack.Make (Conf) (Irmin.Metadata.None) (Irmin.Contents.String)
     (Irmin.Path.String_list)
     (Irmin.Branch.String)
-    (Irmin.Hash.SHA1)
+    (Irmin.Hash.BLAKE2B)
 module Rpc =
   Irmin_rpc_unix.Make
     (Store)
