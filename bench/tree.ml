@@ -218,9 +218,9 @@ struct
     | None -> Lwt.fail_with "commit not found"
     | Some commit ->
         let* tree = Rpc.Client.Commit.tree commit in
-        let* tx = Rpc.Client.Tx.v repo tree in
+        let* tx = Rpc.Client.Tree.Local.of_tree repo tree in
         let* tx = f tx in
-        let* tree = Rpc.Client.Tx.tree tx in
+        let* tree = Rpc.Client.Tree.Local.to_tree repo tx in
         Logs.info (fun l -> l "Checkout_and_commit");
         Rpc.Client.Commit.v repo ~info ~parents:[ prev_commit ] tree
 

@@ -37,6 +37,7 @@ let run (Irmin_unix.Resolver.S ((module Store), store, _)) host port secret_key
       | None ->
           Logs.app (fun l -> l "%s" (Uri.to_string (Rpc.Server.uri server)))
     in
+
     let http =
       Cohttp_lwt_unix.Server.make
         ~callback:(http_server (module Store) (Store.repo store))

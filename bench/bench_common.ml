@@ -103,16 +103,16 @@ struct
     in
     aux 0 []
 
-  let chain_tree (tree : Client.tx) depth path =
+  let chain_tree (tree : Client.Tree.Local.t) depth path =
     let k = path @ key depth in
-    Client.Tx.add tree k (random_blob ())
+    Client.Tree.Local.add tree k (random_blob ())
 
   let add_chain_trees depth nb tree =
     let path = key 2 in
     let rec aux i tree =
       if i >= nb then Lwt.return tree
       else
-        let* () = chain_tree tree depth path in
+        let* tree = chain_tree tree depth path in
         aux (i + 1) tree
     in
     aux 0 tree
@@ -122,7 +122,7 @@ struct
       if i >= width then Lwt.return tree
       else
         let k = path @ [ random_key () ] in
-        let* () = Client.Tx.add tree k (random_blob ()) in
+        let* tree = Client.Tree.Local.add tree k (random_blob ()) in
         aux (i + 1) tree
     in
     aux 0 tree

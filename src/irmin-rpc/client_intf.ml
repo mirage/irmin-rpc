@@ -270,6 +270,9 @@ module type S = sig
     val v : repo -> tree -> tx Lwt.t
     (** Convert a [Tree] into an editable [Tx] *)
 
+    val empty : repo -> tx Lwt.t
+    (** Create a new transaction with an empty tree *)
+
     val remove : tx -> key -> unit Lwt.t
     (** Remove a key from [Tx] *)
 

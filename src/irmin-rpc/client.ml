@@ -221,13 +221,34 @@ functor
         let open Raw.Client.Repo.ImportContents in
         Logs.info (fun l -> l "Contents.bulk_import");
         let req, p = Capability.Request.create Params.init_pointer in
+        let l =
+          List.map
+            (fun c ->
+              let hash = St.Contents.hash c in
+
+              if Cache.mem cache hash then `Hash hash else `Contents c)
+            contents
+        in
         let _ =
-          Params.values_set_list p (List.map Codec.Contents.encode contents)
+          Params.values_set_list p
+            (List.filter_map
+               (function
+                 | `Contents c ->
+                     let c = Codec.Contents.encode c in
+                     Some c
+                 | _ -> None)
+               l)
         in
         let+ x = Capability.call_for_value_exn repo method_id req in
-        List.map
-          (fun x -> Codec.Hash.decode x |> unwrap)
-          (Results.hash_get_list x)
+        List.map2
+          (fun x c ->
+            match c with
+            | `Contents c ->
+                let h = Codec.Hash.decode x |> unwrap in
+                Cache.add cache h c;
+                h
+            | `Hash h -> h)
+          (Results.hash_get_list x) l
 
       let import repo (contents : contents) : hash Lwt.t =
         let hash = St.Contents.hash contents in
@@ -238,7 +259,11 @@ functor
           let req, p = Capability.Request.create Params.init_pointer in
           let _ = Params.values_set_list p [ Codec.Contents.encode contents ] in
           let+ x = Capability.call_for_value_exn repo method_id req in
-          List.hd (Results.hash_get_list x) |> Codec.Hash.decode |> unwrap
+          let hash =
+            List.hd (Results.hash_get_list x) |> Codec.Hash.decode |> unwrap
+          in
+          let () = Cache.add cache hash contents in
+          hash
     end
 
     module Tree = struct
@@ -409,6 +434,20 @@ functor
                 `Contents hash
           | `Node l ->
               let* l = St.Tree.list (St.Tree.of_node l) St.Key.empty in
+              (*let* contents =
+                  Lwt_list.filter_map_p
+                    (fun (_, x) ->
+                      match St.Tree.destruct x with
+                      | `Contents (s, _) ->
+                          let hash = St.Tree.Contents.hash s in
+                          if not (Contents.Cache.mem Contents.cache hash) then
+                            let* x = St.Tree.Contents.force_exn s in
+                            Lwt.return_some x
+                          else Lwt.return_none
+                      | `Node _ -> Lwt.return_none)
+                    l
+                in
+                let* _ = Contents.bulk_import repo contents in*)
               let+ l =
                 Lwt_list.map_s
                   (fun (step, local) ->
@@ -673,6 +712,8 @@ functor
                 Capability.when_released x (fun () ->
                     try Capability.dec_ref x with _ -> ());
                 x))
+
+      let empty repo = Tree.empty repo >>= v repo
 
       let commit tx store ~info key : unit Lwt.t =
         let* tree = tree tx in
