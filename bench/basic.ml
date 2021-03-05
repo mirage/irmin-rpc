@@ -11,29 +11,29 @@ module Rpc =
     (Irmin_rpc.Config.Remote.None (Store))
     (Irmin_rpc.Config.Pack.Make (Store))
 
-let rec rpc_add tx n =
-  if n = 0 then Lwt.return tx
+let rec add tree n =
+  if n = 0 then Lwt.return_unit
   else
-    let s = random_string (Random.int 1024) in
-    let key = [ random_key () ] in
-    let* tx = Rpc.Client.Tree.Local.add tx key s in
-    rpc_add tx (n - 1)
+    let s = String.make 1024 'A' in
+    let key = [ string_of_int n ] in
+    let* () = Rpc.Client.Tx.add tree key s in
+    add tree (n - 1)
 
 let rpc url =
   let* n, () =
+    let* client = Rpc.Client.connect (Uri.of_string url) in
+    let* repo = Rpc.Client.repo client in
+    let* master = Rpc.Client.Store.master repo in
+    let* tx = Rpc.Client.Tx.empty repo in
     with_timer (fun () ->
-        let* client = Rpc.Client.connect (Uri.of_string url) in
-        let* repo = Rpc.Client.repo client in
-        let* master = Rpc.Client.Store.master repo in
-        let tx = Rpc.Client.Tree.Local.empty in
-        let* tx = rpc_add tx 100000 in
-        let* tree = Rpc.Client.Tree.Local.to_tree repo tx in
+        let* () = add tx 100000 in
         let* () =
-          Rpc.Client.Store.set_tree master ~info:(Irmin_unix.info "test") []
-            tree
+          Rpc.Client.Tx.commit tx master [ "a" ] ~info:(Irmin_unix.info "test")
         in
         Lwt.return_unit)
   in
   Lwt_io.printf "%f\n" n
 
-let () = Lwt_main.run (rpc Sys.argv.(1))
+let () =
+  Memtrace.trace_if_requested ();
+  Lwt_main.run (rpc Sys.argv.(1))

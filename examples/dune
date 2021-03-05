@@ -1,5 +1,5 @@
 (executables
- (names client server tree)
+ (names client server tree ping)
  (libraries checkseum.c digestif.c irmin-unix irmin-rpc-unix lwt lwt.unix uri
    capnp-rpc-unix))
 

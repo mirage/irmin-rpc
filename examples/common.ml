@@ -1,9 +1,9 @@
 module Store =
   Irmin_pack.Make
     (struct
-      let stable_hash = 32
+      let stable_hash = 256
 
-      let entries = 256
+      let entries = 32
     end)
     (Irmin.Metadata.None)
     (Irmin.Contents.String)
