@@ -19,14 +19,14 @@ let rec add tree n =
     let* () = Rpc.Client.Tx.add tree key s in
     add tree (n - 1)
 
-let rpc url =
+let rpc url n =
   let* n, () =
     let* client = Rpc.Client.connect (Uri.of_string url) in
     let* repo = Rpc.Client.repo client in
     let* master = Rpc.Client.Store.master repo in
     let* tx = Rpc.Client.Tx.empty repo in
     with_timer (fun () ->
-        let* () = add tx 100000 in
+        let* () = add tx n in
         let* () =
           Rpc.Client.Tx.commit tx master [ "a" ] ~info:(Irmin_unix.info "test")
         in
@@ -35,5 +35,8 @@ let rpc url =
   Lwt_io.printf "%f\n" n
 
 let () =
+  let n =
+    if Array.length Sys.argv > 2 then int_of_string Sys.argv.(2) else 10_000
+  in
   Memtrace.trace_if_requested ();
-  Lwt_main.run (rpc Sys.argv.(1))
+  Lwt_main.run (rpc Sys.argv.(1) n)

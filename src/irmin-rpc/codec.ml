@@ -8,9 +8,9 @@ let unwrap = function Ok x -> x | Error (`Msg m) -> raise (Error_message m)
 let errorf fmt = Format.kasprintf (fun m -> Error (`Msg m)) fmt
 
 let codec_of_type (type a) (t : a Irmin.Type.t) =
-  let encode = Irmin.Type.to_string t
+  let encode = Irmin.Type.(unstage (to_bin_string t))
   and decode s =
-    (Irmin.Type.of_string t s
+    (Irmin.Type.(unstage (of_bin_string t)) s
       : (a, [ `Msg of _ ]) result
       :> (a, [> `Msg of _ ]) result)
   in
