@@ -14,7 +14,7 @@ module Rpc =
 let rec add tree n =
   if n = 0 then Lwt.return_unit
   else
-    let s = String.make 1024 'A' in
+    let s = random_string 512 in
     let key = [ string_of_int n ] in
     let* () = Rpc.Client.Tx.add tree key s in
     add tree (n - 1)
