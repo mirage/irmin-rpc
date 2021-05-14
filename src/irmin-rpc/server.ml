@@ -32,25 +32,25 @@ let with_initialised_results (type t) (module Results : RESULTS with type t = t)
 module Make : MAKER =
 functor
   (St : Irmin.S)
-  (Remote : Config_intf.REMOTE with type t = St.Private.Sync.endpoint)
+  (R : Config_intf.REMOTE with type t = St.Private.Remote.endpoint)
   (Pack : Config_intf.PACK with type repo = St.repo)
   ->
   struct
     module P = Pack
 
     let remote =
-      match Remote.v with
+      match R.v with
       | Some x -> x
       | None ->
           (module struct
-            type t = St.Private.Sync.endpoint
+            type t = St.Private.Remote.endpoint
 
             let decode _ = assert false
 
             let encode _ = assert false
           end)
 
-    module Sy = Irmin.Sync (St)
+    module Sy = Irmin.Sync.Make (St)
     module Codec = Codec.Make (St)
 
     type repo = St.repo
@@ -60,6 +60,8 @@ functor
     type commit = St.commit
 
     type hash = St.hash
+
+    type info = St.info
 
     let unwrap = function
       | Ok x -> x
@@ -391,7 +393,7 @@ functor
         |> Pack.local
     end
 
-    module Sync = struct
+    module Remote = struct
       let remote_of_endpoint e = St.E e
 
       module type RESULT_SET = sig
@@ -416,15 +418,15 @@ functor
         | Error e -> Lwt.return @@ Error (convert_error Sy.pp_pull_error e)
 
       let local store =
-        let module Sync = Raw.Service.Sync in
+        let module Remote = Raw.Service.Remote in
         object
-          inherit Sync.service
+          inherit Remote.service
 
           method push_impl params release_param_caps =
-            let open Sync.Push in
+            let open Remote.Push in
             let endpoint = Params.endpoint_get params in
             release_param_caps ();
-            Logs.info (fun f -> f "Sync.push");
+            Logs.info (fun f -> f "Remote.push");
             let (module Remote) = remote in
             with_initialised_results
               (module Results)
@@ -432,7 +434,7 @@ functor
                 let remote =
                   endpoint |> Remote.decode |> unwrap |> remote_of_endpoint
                 in
-                let+ (_ : Raw.Builder.Sync.PushResult.t) =
+                let+ (_ : Raw.Builder.Remote.PushResult.t) =
                   Sy.push store remote
                   >>= Codec.Push_result.encode
                   >|= Results.result_set_builder results
@@ -440,11 +442,11 @@ functor
                 Ok ())
 
           method pull_impl params release_param_caps =
-            let open Sync.Pull in
+            let open Remote.Pull in
             let endpoint = Params.endpoint_get params in
             let info = Codec.Info.decode (Params.info_get params) in
             release_param_caps ();
-            Logs.info (fun f -> f "Sync.pull");
+            Logs.info (fun f -> f "Remote.pull");
             let (module Remote) = remote in
             with_initialised_results
               (module Results)
@@ -458,10 +460,10 @@ functor
                       store results)
 
           method clone_impl params release_param_caps =
-            let open Sync.Clone in
+            let open Remote.Clone in
             let endpoint = Params.endpoint_get params in
             release_param_caps ();
-            Logs.info (fun f -> f "Sync.clone");
+            Logs.info (fun f -> f "Remote.clone");
             let (module Remote) = remote in
             with_initialised_results
               (module Results)
@@ -474,7 +476,7 @@ functor
                       (module Results : RESULT_SET with type t = Results.t)
                       store results)
         end
-        |> Sync.local
+        |> Remote.local
     end
 
     module Store = struct
@@ -628,16 +630,16 @@ functor
                 in
                 Ok ())
 
-          method sync_impl _params release_param_caps =
-            let open Store.Sync in
+          method remote_impl _params release_param_caps =
+            let open Store.Remote in
             release_param_caps ();
-            Logs.info (fun f -> f "Store.sync");
+            Logs.info (fun f -> f "Store.remote");
             with_initialised_results
               (module Results)
               (fun results ->
-                if Option.is_some Remote.v then (
-                  let cap = Sync.local store in
-                  Results.sync_set results (Some cap);
+                if Option.is_some R.v then (
+                  let cap = Remote.local store in
+                  Results.remote_set results (Some cap);
                   Capability.dec_ref cap);
                 Lwt.return @@ Ok ())
 

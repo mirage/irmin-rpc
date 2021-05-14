@@ -9,6 +9,8 @@ module type S = sig
 
   type hash
 
+  type info
+
   module Commit : sig
     type t = Raw.Client.Commit.t cap
 
@@ -37,7 +39,7 @@ end
 
 module type MAKER = functor
   (Store : Irmin.S)
-  (Remote : Config_intf.REMOTE with type t = Store.Private.Sync.endpoint)
+  (Remote : Config_intf.REMOTE with type t = Store.Private.Remote.endpoint)
   (Pack : Config_intf.PACK with type repo = Store.repo)
   ->
   S
@@ -45,6 +47,7 @@ module type MAKER = functor
      and type store = Store.t
      and type commit = Store.commit
      and type hash = Store.hash
+     and type info = Store.Info.t
 
 module type Server = sig
   module type S = S

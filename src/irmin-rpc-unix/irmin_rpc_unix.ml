@@ -13,7 +13,7 @@ end
 
 module Make
     (Store : Irmin.S)
-    (Remote : Irmin_rpc.Config.REMOTE with type t = Store.Private.Sync.endpoint)
+    (Remote : Irmin_rpc.Config.REMOTE with type t = Store.Private.Remote.endpoint)
     (Pack : Irmin_rpc.Config.PACK with type repo = Store.repo) =
 struct
   module Server = struct

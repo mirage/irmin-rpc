@@ -31,7 +31,7 @@ module type Config = sig
     module Make : functor (C : Codec.SERIALISABLE) -> REMOTE with type t = C.t
 
     module None (Store : Irmin.S) :
-      REMOTE with type t = Store.Private.Sync.endpoint
+      REMOTE with type t = Store.Private.Remote.endpoint
   end
 
   module Pack : sig

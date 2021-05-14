@@ -9,7 +9,7 @@ module Types = struct
 
   type commit = Raw.Client.Commit.t Capability.t
 
-  type sync = Raw.Client.Sync.t Capability.t
+  type remote = Raw.Client.Remote.t Capability.t
 
   type pack = Raw.Client.Pack.t Capability.t
 
@@ -38,9 +38,13 @@ module type S = sig
   type step
   (** Key step, inherited from the underlying Irmin store *)
 
+  type info
+
   module Key : Irmin.Path.S with type t = key and type step = step
 
   module Hash : Irmin.Hash.S with type t = hash
+
+  module Info : Irmin.Info.S with type t = info
 
   module Store : sig
     type t = store
@@ -69,22 +73,22 @@ module type S = sig
     val get_tree : t -> key -> tree Lwt.t
     (** Get a tree from the Irmin store *)
 
-    val set : info:Irmin.Info.f -> t -> key -> contents -> unit Lwt.t
+    val set : info:Info.f -> t -> key -> contents -> unit Lwt.t
     (** Set a value at the specified key *)
 
     val test_and_set :
-      info:Irmin.Info.f ->
+      info:Info.f ->
       t ->
       key ->
       test:contents option ->
       set:contents option ->
       bool Lwt.t
 
-    val set_tree : info:Irmin.Info.f -> t -> key -> tree -> unit Lwt.t
+    val set_tree : info:Info.f -> t -> key -> tree -> unit Lwt.t
     (** Set a tree at the specified key *)
 
     val test_and_set_tree :
-      info:Irmin.Info.f ->
+      info:Info.f ->
       t ->
       key ->
       test:tree option ->
@@ -98,8 +102,8 @@ module type S = sig
       t -> info:Info.f -> branch -> (unit, Merge.conflict) result Lwt.t
     (** Merge the current branch with another branch *)
 
-    val sync : t -> sync option Lwt.t
-    (** Get [sync] capability *)
+    val remote : t -> remote option Lwt.t
+    (** Get [remote] capability *)
 
     val pack : t -> pack option Lwt.t
     (** Get [pack] capability *)
@@ -132,7 +136,7 @@ module type S = sig
     val hash : commit -> hash Lwt.t
     (** Get commit hash *)
 
-    val info : commit -> Irmin.Info.t Lwt.t
+    val info : commit -> Info.t Lwt.t
     (** Get commit info *)
 
     val parents : commit -> hash list Lwt.t
@@ -142,20 +146,20 @@ module type S = sig
     (** Get commit tree *)
   end
 
-  module Sync : sig
+  module Remote : sig
     type endpoint
-    (** Sync endpoint type *)
+    (** Remote endpoint type *)
 
-    type t = sync
+    type t = remote
 
-    val clone : sync -> endpoint -> commit Lwt.t
+    val clone : remote -> endpoint -> commit Lwt.t
     (** Clone remote repository *)
 
-    val pull : sync -> info:Irmin.Info.f -> endpoint -> commit Lwt.t
+    val pull : remote -> info:Info.f -> endpoint -> commit Lwt.t
     (** Pull from remote repository *)
 
     val push :
-      sync ->
+      remote ->
       endpoint ->
       ([ `Empty | `Head of hash ], [ `Detached_head | `Msg of string ]) result
       Lwt.t
@@ -237,7 +241,7 @@ end
 
 module type MAKER = functor
   (Store : Irmin.S)
-  (Remote : Config.REMOTE with type t = Store.Private.Sync.endpoint)
+  (Remote : Config.REMOTE with type t = Store.Private.Remote.endpoint)
   (Pack : Config.PACK with type repo = Store.repo)
   ->
   S
@@ -245,10 +249,11 @@ module type MAKER = functor
      and type key = Store.key
      and type contents = Store.contents
      and type hash = Store.hash
-     and type Sync.endpoint = Remote.t
+     and type Remote.endpoint = Remote.t
      and type step = Store.Key.step
      and module Key = Store.Key
      and module Hash = Store.Hash
+     and type info = Store.Info.t
 
 module type Client = sig
   module type S = S

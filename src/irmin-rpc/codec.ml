@@ -48,15 +48,15 @@ module Make (Store : Irmin.S) = struct
   end
 
   module Info = struct
-    type t = Irmin.Info.t
+    type t = Store.Info.t
 
     let encode : t -> Raw.Builder.Info.t =
      fun t ->
       let open Raw.Builder.Info in
       let b = init_root () in
-      author_set b (Irmin.Info.author t);
-      message_set b (Irmin.Info.message t);
-      date_set b (Irmin.Info.date t);
+      author_set b (Store.Info.author t);
+      message_set b (Store.Info.message t);
+      date_set b (Store.Info.date t);
       b
 
     let decode : Raw.Reader.Info.t -> t =
@@ -65,7 +65,7 @@ module Make (Store : Irmin.S) = struct
       let author = author_get str
       and message = message_get str
       and date = date_get str in
-      Irmin.Info.v ~date ~author message
+      Store.Info.v ~author ~message date
   end
 
   module Tree = struct
@@ -217,9 +217,9 @@ module Make (Store : Irmin.S) = struct
         [ `Detached_head | `Msg of string ] )
       result
 
-    let encode : t -> Raw.Builder.Sync.PushResult.t Lwt.t =
+    let encode : t -> Raw.Builder.Remote.PushResult.t Lwt.t =
      fun t ->
-      let open Raw.Builder.Sync.PushResult in
+      let open Raw.Builder.Remote.PushResult in
       let b = init_root () in
       match t with
       | Ok `Empty ->
@@ -239,9 +239,9 @@ module Make (Store : Irmin.S) = struct
   let encode_commit_info cm info =
     let module Info = Raw.Builder.Info in
     let i = Store.Commit.info cm in
-    Info.author_set info (Irmin.Info.author i);
-    Info.message_set info (Irmin.Info.message i);
-    Info.date_set info (Irmin.Info.date i)
+    Info.author_set info (Store.Info.author i);
+    Info.message_set info (Store.Info.message i);
+    Info.date_set info (Store.Info.date i)
 end
 
 module Unit = struct

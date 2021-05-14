@@ -8,7 +8,7 @@ module Remote = struct
   end
 
   module None (Store : Irmin.S) = struct
-    type t = Store.Private.Sync.endpoint
+    type t = Store.Private.Remote.endpoint
 
     let v = None
   end
