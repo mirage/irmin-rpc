@@ -68,13 +68,13 @@ end
 
 (** Helpers for constructing data. *)
 
-module Faker  = struct
+module Faker = struct
   let () = Random.self_init ()
 
   let string ?(length = 10) () =
     String.init length (fun _i -> Random.int 256 |> Char.chr)
 
-  let info (type a) (module Info: Irmin.Info.S with type t = a) () =
+  let info (type a) (module Info : Irmin.Info.S with type t = a) () =
     let date = Random.int64 Int64.max_int
     and author = string ()
     and message = string () in

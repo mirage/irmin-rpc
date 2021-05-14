@@ -9,13 +9,11 @@ module Maker =
       let entries = 32
     end)
 
-module Store = Maker.Make
-    (Irmin.Metadata.None)
-    (Irmin.Contents.String)
+module Store =
+  Maker.Make (Irmin.Metadata.None) (Irmin.Contents.String)
     (Irmin.Path.String_list)
     (Irmin.Branch.String)
     (Irmin.Hash.BLAKE2B)
-
 module Rpc =
   Irmin_rpc_unix.Make
     (Store)
