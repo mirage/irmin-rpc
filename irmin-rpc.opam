@@ -32,10 +32,10 @@ dev-repo: "git+ssh://github.com/mirage/irmin-rpc"
 pin-depends: [
   [
     "ppx_irmin.dev"
-    "git+https://github.com/mirage/irmin#806315563437cb8d77e32f75daee1408f32b2bda"
+    "git+https://github.com/mirage/irmin#8f20cadd955c21895214c5105daa239f61f06413"
   ]
   [
     "irmin.dev"
-    "git+https://github.com/mirage/irmin#806315563437cb8d77e32f75daee1408f32b2bda"
+    "git+https://github.com/mirage/irmin#8f20cadd955c21895214c5105daa239f61f06413"
   ]
 ]
