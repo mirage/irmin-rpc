@@ -15,7 +15,6 @@ depends: [
   "mirage-stack" {>= "2.0.0"}
   "dns-client"
   "capnp-rpc-mirage" {>= "0.9.0"}
-  "git-mirage"
   "capnp-rpc-lwt" {>= "0.9.0"}
   "capnp-rpc-net" {>= "0.9.0"}
   "irmin" {>= "dev"}
