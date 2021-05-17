@@ -6,10 +6,7 @@ module Make
     (Mclock : Mirage_clock.MCLOCK)
     (Pclock : Mirage_clock.PCLOCK)
     (Time : Mirage_time.S)
-    (Stack : Mirage_stack.V4) : sig
-  module Dns :
-      module type of Dns_client_mirage.Make (Random) (Time) (Mclock) (Stack)
-
+    (Stack : Mirage_stack.V4V6) : sig
   module Server : sig
     include
       Irmin_rpc.Server.S
