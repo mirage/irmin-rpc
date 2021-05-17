@@ -19,7 +19,7 @@ let ( let* ) = Lwt.bind
 module Make : MAKER =
 functor
   (Store : Irmin.S)
-  (Remote : Config.REMOTE with type t = Store.Private.Sync.endpoint)
+  (R : Config.REMOTE with type t = Store.Private.Remote.endpoint)
   (Pack : Config.PACK with type repo = Store.repo)
   ->
   struct
@@ -27,6 +27,7 @@ functor
     include Types
     module Key = Store.Key
     module Hash = Store.Hash
+    module Info = Store.Info
 
     type t = Raw.Client.Irmin.t Capability.t
 
@@ -40,14 +41,16 @@ functor
 
     type step = Store.Key.step
 
+    type info = Store.info
+
     let remote =
-      match Remote.v with
+      match R.v with
       | Some x -> x
       | None ->
           (module struct
-            type t = Store.Private.Sync.endpoint
+            type t = Store.Private.Remote.endpoint
 
-            let fail () = failwith "Sync API is not available"
+            let fail () = failwith "Remote API is not available"
 
             let decode _ = fail ()
 
@@ -105,24 +108,24 @@ functor
         |> List.map (fun x -> Codec.Hash.decode x |> Result.get_ok)
     end
 
-    module Sync = struct
-      type t = sync
+    module Remote = struct
+      type t = remote
 
-      type endpoint = Remote.t
+      type endpoint = R.t
 
       let clone t endpoint =
-        let open Raw.Client.Sync.Clone in
+        let open Raw.Client.Remote.Clone in
         let (module Remote) = remote in
-        Logs.info (fun l -> l "Sync.clone");
+        Logs.info (fun l -> l "Remote.clone");
         let req, p = Capability.Request.create Params.init_pointer in
         Params.endpoint_set p (Remote.encode endpoint);
         Capability.call_for_caps t method_id req Results.result_get_pipelined
         |> Lwt.return
 
       let pull t ~info endpoint =
-        let open Raw.Client.Sync.Pull in
+        let open Raw.Client.Remote.Pull in
         let (module Remote) = remote in
-        Logs.info (fun l -> l "Sync.pull");
+        Logs.info (fun l -> l "Remote.pull");
         let req, p = Capability.Request.create Params.init_pointer in
         Params.endpoint_set p (Remote.encode endpoint);
         let _ = Params.info_set_builder p (Codec.Info.encode @@ info ()) in
@@ -130,7 +133,7 @@ functor
         |> Lwt.return
 
       let decode_push_result t =
-        let open Raw.Reader.Sync.PushResult in
+        let open Raw.Reader.Remote.PushResult in
         match get t with
         | OkEmpty -> Lwt.return @@ Ok `Empty
         | OkHead head ->
@@ -141,9 +144,9 @@ functor
         | Undefined _ -> Lwt.return @@ Error (`Msg "Undefined")
 
       let push t endpoint =
-        let open Raw.Client.Sync.Push in
+        let open Raw.Client.Remote.Push in
         let (module Remote) = remote in
-        Logs.info (fun l -> l "Sync.push");
+        Logs.info (fun l -> l "Remote.push");
         let req, p = Capability.Request.create Params.init_pointer in
         Params.endpoint_set p (Remote.encode endpoint);
         let* (x : Results.t) = Capability.call_for_value_exn t method_id req in
@@ -409,16 +412,16 @@ functor
         let+ res = Capability.call_for_value_exn t method_id req in
         Results.result_get res |> Codec.Merge_result.decode |> unwrap
 
-      let sync t =
-        if Option.is_none Remote.v then Lwt.return None
+      let remote t =
+        if Option.is_none R.v then Lwt.return None
         else
-          let open Raw.Client.Store.Sync in
-          Logs.info (fun l -> l "Store.sync");
+          let open Raw.Client.Store.Remote in
+          Logs.info (fun l -> l "Store.remote");
           let req = Capability.Request.create_no_args () in
           Lwt.return
           @@ Some
                (Capability.call_for_caps t method_id req
-                  Results.sync_get_pipelined)
+                  Results.remote_get_pipelined)
 
       let pack t =
         if Option.is_some Pack.v then Lwt.return None

@@ -94,7 +94,7 @@ interface Commit {
   check    @5 () -> (bool :Bool);
 }
 
-interface Sync {
+interface Remote {
   struct PushResult {
     union {
       okEmpty            @0  :Void;
@@ -161,8 +161,8 @@ interface Store {
   # Merge the current branch with another branch
   mergeWithBranch  @7  (branch :Text, info :Info) -> (result :MergeResult);
 
-  # Access `Irmin.Sync` functionality`
-  sync  @8  () -> (sync :Sync);
+  # Access `Irmin.Remote` functionality`
+  remote @8  () -> (remote: Remote);
 
   # Access `Irmin_pack` functionality
   pack @9 () -> (pack :Pack);

@@ -29,7 +29,7 @@ module type MAKER = functor (Store : Irmin.S) -> sig
   module Contents : SERIALISABLE with type t = Store.contents
 
   module Info : sig
-    type t = Irmin.Info.t
+    type t = Store.Info.t
 
     val encode : t -> Raw.Builder.Info.t
 
@@ -74,7 +74,7 @@ module type MAKER = functor (Store : Irmin.S) -> sig
         [ `Detached_head | `Msg of string ] )
       result
 
-    val encode : t -> Raw.Builder.Sync.PushResult.t Lwt.t
+    val encode : t -> Raw.Builder.Remote.PushResult.t Lwt.t
   end
 
   val encode_commit_info : Store.commit -> info_struct builder_t -> unit

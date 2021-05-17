@@ -1,4 +1,4 @@
-module Server = Irmin_mem.KV (Irmin.Contents.String)
+module Server = Irmin_mem.KV.Make (Irmin.Contents.String)
 module RPC =
   Irmin_rpc.Make
     (Server)
@@ -57,7 +57,7 @@ module Alcotest = struct
 
   let tree = of_typ Server.Tree.concrete_t
 
-  let info = of_typ Irmin.Info.t
+  let info info_t = of_typ info_t
 
   let find = Alcotest.(result (option string) msg)
 
@@ -74,11 +74,11 @@ module Faker = struct
   let string ?(length = 10) () =
     String.init length (fun _i -> Random.int 256 |> Char.chr)
 
-  let info () =
+  let info (type a) (module Info : Irmin.Info.S with type t = a) () =
     let date = Random.int64 Int64.max_int
     and author = string ()
-    and msg = string () in
-    Irmin.Info.v ~date ~author msg
+    and message = string () in
+    Info.v ~author ~message date
 end
 
 (** Tree with a single child. *)

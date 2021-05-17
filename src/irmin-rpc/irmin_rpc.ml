@@ -9,7 +9,7 @@ end
 
 module Make
     (Store : Irmin.S)
-    (Remote : Config.REMOTE with type t = Store.Private.Sync.endpoint)
+    (Remote : Config.REMOTE with type t = Store.Private.Remote.endpoint)
     (Pack : Config.PACK with type repo = Store.repo) =
 struct
   module Client = Client.Make (Store) (Remote) (Pack)

@@ -10,7 +10,7 @@ let () =
 let uri = Sys.argv.(1)
 
 let info () =
-  Irmin_unix.info ~author:"rpc-client-author" "rpc-client-message" ()
+  Client.Info.v ~author:"rpc-client-author" ~message:"rpc-client-message" 0L
 
 let ( let* ) = Lwt.bind
 

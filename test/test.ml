@@ -2,7 +2,7 @@ open Lwt.Infix
 open Lwt.Syntax
 open Common
 open Irmin_rpc.Private.Utils
-module Server = Irmin_mem.KV (Irmin.Contents.String)
+module Server = Irmin_mem.KV.Make (Irmin.Contents.String)
 module RPC =
   Irmin_rpc.Make
     (Server)
@@ -17,10 +17,10 @@ module Client = struct
   let of_branch = Fun.flip Store.of_branch
 end
 
-(** Default info. *)
-let info = Irmin.Info.none
-
 open Client
+
+(** Default info. *)
+let info = Info.none
 
 module Test_store = struct
   type ctx = { client : Client.repo; server : Server.repo }
@@ -116,7 +116,7 @@ module Test_store = struct
     Lwt.return ()
 
   let test_set { server; client } =
-    let info = Faker.info () in
+    let info = Faker.info (module Server.Info) () in
     let* () =
       let* master = client |> Store.master in
       Store.set ~info:(fun () -> info) master [ "k" ] "v"
@@ -129,7 +129,8 @@ module Test_store = struct
     let* () =
       Server.Head.get master
       >|= Server.Commit.info
-      >|= Alcotest.(check info) "New commit has the correct info" info
+      >|= Alcotest.(check (info Server.Info.t))
+            "New commit has the correct info" info
     in
     Lwt.return ()
 
@@ -137,7 +138,7 @@ module Test_store = struct
     String.init n (fun _ -> char_of_int (31 + Random.int 95))
 
   let test_tree { server; client } =
-    let info () = Faker.info () in
+    let info () = Faker.info (module Server.Info) () in
     let* master = Client.Store.master client in
     let* tree = Client.Tree.empty client in
     let* tree = Client.Tree.add tree [ "a" ] (random_string 2048) in
@@ -154,7 +155,7 @@ module Test_store = struct
     Lwt.return ()
 
   let test_test_and_set { server; client } =
-    let info () = Faker.info () in
+    let info () = Faker.info (module Server.Info) () in
     let* master = Client.Store.master client in
     let s = random_string 1024 in
     let s' = random_string 1024 in
@@ -180,7 +181,7 @@ module Test_store = struct
     Lwt.return ()
 
   let test_test_and_set_tree { server; client } =
-    let info () = Faker.info () in
+    let info () = Faker.info (module Client.Info) () in
     let* master = Client.Store.master client in
     let* tree = Client.Tree.empty client in
     let* tree = Client.Tree.add tree [ "a" ] "1" in

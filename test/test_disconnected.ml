@@ -1,7 +1,7 @@
 open Irmin_rpc.Private.Utils
 open Lwt.Infix
 open Common
-module S_server = Irmin_mem.KV (Irmin.Contents.String)
+module S_server = Irmin_mem.KV.Make (Irmin.Contents.String)
 module RPC =
   Irmin_rpc.Make
     (Server)
