@@ -9,11 +9,17 @@ module Maker =
       let entries = 32
     end)
 
-module Store =
-  Maker.Make (Irmin.Metadata.None) (Irmin.Contents.String)
-    (Irmin.Path.String_list)
-    (Irmin.Branch.String)
-    (Irmin.Hash.BLAKE2B)
+module Store = Maker.Make (struct
+  module Info = Irmin.Info.Default
+  module Metadata = Irmin.Metadata.None
+  module Contents = Irmin.Contents.String
+  module Path = Irmin.Path.String_list
+  module Branch = Irmin.Branch.String
+  module Hash = Irmin.Hash.BLAKE2B
+  module Node = Irmin.Node.Make (Hash) (Path) (Metadata)
+  module Commit = Irmin.Commit.Make (Hash)
+end)
+
 module Rpc =
   Irmin_rpc_unix.Make
     (Store)

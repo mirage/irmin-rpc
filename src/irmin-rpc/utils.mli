@@ -19,10 +19,11 @@ module String : sig
   (** [is_substring "bar" "foo bar baz"] is [true]. *)
 end
 
-val log_key : (module Irmin.S with type key = 'a) -> string -> 'a -> unit
+val log_key :
+  (module Irmin.S with type Schema.Path.t = 'a) -> string -> 'a -> unit
 
 val log_key_result :
-  (module Irmin.S with type key = 'a) ->
+  (module Irmin.S with type Schema.Path.t = 'a) ->
   string ->
   ('a, [ `Msg of string ]) result ->
   unit
